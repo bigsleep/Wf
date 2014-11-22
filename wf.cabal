@@ -18,7 +18,6 @@ cabal-version:          >=1.18
 library
   exposed-modules:      Wf.Control.Eff.Kvs,
                         Wf.Control.Eff.Logger,
-                        Wf.Control.Eff.JsonApi,
                         Wf.Control.Eff.HttpClient,
                         Wf.Control.Eff.Session,
                         Wf.Control.Eff.Authenticate,
