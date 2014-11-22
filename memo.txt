@@ -10,6 +10,23 @@ effの別の実装もある。
 
 json以外のシリアライズ方法。後でもいい
 
+
+モジュールをある程度分ける
+
+wf
+wf-session
+wf-session-kvs
+wf-kvs-stm
+wf-kvs-redis
+wf-authenticate
+wf-persistent
+
+
+authenticateでセッション使う場合もまとめるほうがいいかも。
+セッションすでにある場合はキーは必要ないので。Maybe keyとかにする?
+
+reflectionとReaderとあると複雑すぎる感がある
+
 --------------------------------------------------------------------------
 20140908 sample
 
