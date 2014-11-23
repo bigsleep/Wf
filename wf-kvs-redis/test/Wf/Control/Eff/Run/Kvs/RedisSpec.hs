@@ -7,7 +7,7 @@ import Control.Eff (Eff, VE(..), (:>), Member, SetMember, admin, handleRelay)
 import Control.Eff.Lift (Lift, runLift)
 import Wf.Control.Eff.Logger (LogLevel(..), runLoggerStdIO)
 import Control.Eff.Exception (runExc)
-import qualified Wf.Control.Eff.Kvs as Kvs (Kvs(..), get, set, setWithTtl, delete, exists, ttl, KeyType)
+import qualified Wf.Kvs.Redis as Kvs (runKvsRedis, Kvs(..), get, set, setWithTtl, delete, exists, ttl, KeyType)
 
 import Control.Exception (SomeException)
 import Control.Concurrent (threadDelay)
@@ -20,7 +20,6 @@ import qualified Data.ByteString.Lazy as L (ByteString, fromStrict, toStrict)
 import qualified Data.ByteString.Lazy.Char8 as L (pack)
 
 import Wf.Application.Logger (Logger)
-import Wf.Control.Eff.Run.Kvs.Redis (runKvsRedis)
 import Wf.Application.Exception (Exception)
 
 import Test.Hspec (Spec, describe, it, shouldBe, shouldSatisfy)
@@ -159,5 +158,5 @@ ttlSpec = describe "kvs-redis ttl" $ do
 
 
 runTest :: Eff (Kvs.Kvs () :> Exception :> Logger :> Lift IO :> ()) a -> IO (Either String a)
-runTest = (either (return . Left . show) (return . Right) =<<) . runLift . runLoggerStdIO DEBUG . runExc . runKvsRedis testConnectInfo
+runTest = (either (return . Left . show) (return . Right) =<<) . runLift . runLoggerStdIO DEBUG . runExc . Kvs.runKvsRedis testConnectInfo
 

@@ -2,5 +2,4 @@
 cabal.sandbox.config
 dist
 *.swp
-test/config
 oauth2-example/config/settings.json
