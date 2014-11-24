@@ -9,7 +9,9 @@ import Control.Eff.Lift (Lift, runLift)
 import Control.Monad (sequence_)
 import Control.Exception (SomeException(..))
 
-import qualified Network.HTTP.Types as HTTP (Method, status200, status404, methodGet, methodPost, hContentType, hContentLength)
+import qualified Network.HTTP.Types as HTTP (Method, status200, status400, status404, methodGet, methodPost, hContentType, hContentLength)
+import qualified Network.Wai as Wai (Request, Response, requestMethod)
+import qualified Network.Wai.Test as WT
 
 import qualified Data.ByteString as B (ByteString)
 import qualified Data.ByteString.Char8 as B (pack)
@@ -26,6 +28,7 @@ import Wf.Web.Api (apiRoutes)
 import Wf.Web.JsonApi (jsonApi, jsonPostApi, jsonGetApi, JsonInput(..), JsonOutput(..), JsonParseError)
 import Wf.Network.Http.Types (Request(..), Response(..), defaultRequest, defaultResponse)
 import Wf.Network.Http.Response (setStatus, setBody)
+import Wf.Network.Wai (toWaiResponse)
 import Wf.Application.Exception (Exception)
 import Wf.Application.Logger (Logger)
 import Wf.Control.Eff.Logger (runLoggerStdIO, LogLevel(..))
@@ -35,50 +38,55 @@ import Test.Hspec (Spec, describe, it, shouldBe, shouldSatisfy, expectationFailu
 jsonApiSpec :: Spec
 jsonApiSpec = describe "json api" . it "create json api" $ do
     let rootInput = ()
-    execCase $ testCase HTTP.methodGet "/" rootInput (shouldResponseNormal . rootApp $ rootInput)
+    execCase HTTP.methodGet "/" rootInput (shouldResponseNormal . rootApp $ rootInput)
 
     let rootBadInput = "admin" :: String
-    execCase $ testCase HTTP.methodGet "/" rootBadInput shouldRequestParseError
+    execCase HTTP.methodGet "/" rootBadInput (shouldError 400)
 
     let addInput = (1, 2) :: (Int, Int)
-    execCase $ testCase HTTP.methodGet "/add" addInput (shouldResponseNormal (3 :: Int))
+    execCase HTTP.methodGet "/add" addInput (shouldResponseNormal (3 :: Int))
 
     let addBadInput = (1, 2, 3) :: (Int, Int, Int)
-    execCase $ testCase HTTP.methodGet "/add" addBadInput shouldRequestParseError
+    execCase HTTP.methodGet "/add" addBadInput (shouldError 400)
 
     let dicInput = [1, 2, 3, 4, 5] :: [Int]
-    execCase $ testCase HTTP.methodPost "/dic" dicInput (shouldResponseNormal . dicApp $ dicInput)
+    execCase HTTP.methodPost "/dic" dicInput (shouldResponseNormal . dicApp $ dicInput)
 
     let dicBadInput = ["1", "2", "3", "4"] :: [String]
-    execCase $ testCase HTTP.methodPost "/dic" dicBadInput shouldRequestParseError
+    execCase HTTP.methodPost "/dic" dicBadInput (shouldError 400)
 
     -- not found case
-    execCase $ testCase HTTP.methodGet "/xxx" () (\(Right res) -> res `shouldBe` notFoundApp)
+    execCase HTTP.methodGet "/xxx" () (shouldError 404)
 
     where
-    testCase :: (DA.ToJSON a) => HTTP.Method -> B.ByteString -> a -> (Either SomeException (Response L.ByteString) -> IO ()) -> TestCase
-    testCase method path body = TestCase method path defaultRequest { requestBody = DA.encode . JsonInput $ body }
+    testApp request respond = (respond =<<) . (handleResult =<<) . runLift . runLoggerStdIO DEBUG . runExc . routes $ request
+    handleResult (Right r) = return r
+    handleResult (Left _) = return . toWaiResponse . setStatus HTTP.status400 . defaultResponse $ ()
 
-    execCase (TestCase method path request satisfy) =
-        satisfy =<< (runLift . runLoggerStdIO DEBUG . runExc) (routes request method path)
+    execCase :: (DA.ToJSON a) => HTTP.Method -> B.ByteString -> a -> (WT.SRequest -> WT.Session ()) -> IO ()
+    execCase method path a s =
+        WT.runSession (s sreq) testApp
+        where
+        body = DA.encode (JsonInput a)
+        req = WT.setRawPathInfo WT.defaultRequest {Wai.requestMethod = method} path
+        sreq = WT.SRequest { WT.simpleRequest = req, WT.simpleRequestBody = body }
 
-    shouldResponseNormal :: (DA.ToJSON a) => a -> Either SomeException (Response L.ByteString) -> IO ()
-    shouldResponseNormal body (Right r) = do
+    shouldResponseNormal :: (DA.ToJSON a) => a -> WT.SRequest -> WT.Session ()
+    shouldResponseNormal body sreq  = do
+        r <- WT.srequest sreq
         let body' = DA.encode . JsonOutput $ body
-            contentType = (HTTP.hContentType, "application/json")
-            contentLength = (HTTP.hContentLength, B.pack . show . L.length $ body')
-            headers = [contentType, contentLength]
-        r `shouldBe` Response HTTP.status200 headers body'
-    shouldResponseNormal _ _ = expectationFailure "Left"
+        WT.assertStatus 200 r
+        WT.assertContentType "application/json" r
+        WT.assertHeader HTTP.hContentLength (B.pack . show . L.length $ body') r
+        WT.assertBody body' r
 
-    shouldRequestParseError (Left (SomeException r)) = shouldSatisfy (cast r :: Maybe JsonParseError) isJust
-    shouldRequestParseError _ = expectationFailure "Right"
+    shouldError code sreq = do
+        r <- WT.srequest sreq
+        WT.assertStatus code r
 
 type M = Eff (Exception :> Logger :> Lift IO :> ())
 
-data TestCase = TestCase HTTP.Method B.ByteString (Request L.ByteString) (Either SomeException (Response L.ByteString) -> IO ())
-
-routes :: Request L.ByteString -> HTTP.Method -> B.ByteString -> M (Response L.ByteString)
+routes :: Wai.Request -> M Wai.Response
 routes = apiRoutes (return notFoundApp)
     [ jsonGetApi "/" (return . rootApp)
     , jsonGetApi "/add" (return . addApp)

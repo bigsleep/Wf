@@ -27,6 +27,7 @@ import Wf.Web.Api (ApiDefinition(..), ApiInfo)
 import Wf.Web.Routing (RouteDefinition(..), RouteMethod(..), parseRoute)
 import Wf.Application.Exception (Exception, throwException)
 import Wf.Application.Logger (Logger, logDebug)
+import qualified Wf.Network.Wai as Wai (App(..))
 
 newtype JsonInput a = JsonInput { unJsonInput :: a } deriving (Show, Typeable, Eq)
 
@@ -52,12 +53,12 @@ instance Control.Exception.Exception JsonParseError
 
 jsonApi
     :: (DA.FromJSON i, DA.ToJSON o, Member Exception r, Member Logger r)
-    => String -> RouteDefinition -> (Given ApiInfo => i -> Eff r o) -> ApiDefinition (Request L.ByteString) (Response L.ByteString) (Eff r)
+    => String -> RouteDefinition -> (Given ApiInfo => i -> Eff r o) -> ApiDefinition (Eff r)
 jsonApi name route f =
     ApiDefinition
     { apiName = name
     , apiRouteDefinition = route
-    , apiImplement = api f
+    , apiImplement = Wai.App (api f)
     , apiBefore = return ()
     , apiAfter = return ()
     }
@@ -90,6 +91,6 @@ jsonApi name route f =
 
 jsonPostApi, jsonGetApi
     :: (DA.FromJSON i, DA.ToJSON o, Member Exception r, Member Logger r)
-    => String -> (Given ApiInfo => i -> Eff r o) -> ApiDefinition (Request L.ByteString) (Response L.ByteString) (Eff r)
+    => String -> (Given ApiInfo => i -> Eff r o) -> ApiDefinition (Eff r)
 jsonPostApi route = jsonApi route RouteDefinition { routeDefinitionMethod = RouteMethodSpecific HTTP.methodPost, routeDefinitionPattern = parseRoute route }
 jsonGetApi route = jsonApi route RouteDefinition { routeDefinitionMethod = RouteMethodSpecific HTTP.methodGet, routeDefinitionPattern = parseRoute route }
