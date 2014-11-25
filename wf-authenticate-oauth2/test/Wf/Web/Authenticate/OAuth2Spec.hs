@@ -25,8 +25,8 @@ import qualified Data.ByteString.Lazy as L (ByteString, fromStrict, toStrict)
 import qualified Data.ByteString.Lazy.Char8 as L (pack)
 import qualified Data.Text.Encoding as T (decodeUtf8)
 import qualified Data.Aeson as DA (Value(..), encode, decode)
+import qualified Data.Binary as Bin (encode, decode)
 import Data.Either (isLeft)
-import Wf.Data.Serializable (serialize, deserialize)
 import GHC.Exts (sortWith)
 
 import qualified Network.Wai as Wai (Request, Response, defaultRequest, requestHeaders, responseLBS, responseStatus, responseHeaders)
@@ -93,7 +93,7 @@ redirectAuthServerSpec =
 
         let Just (redirectUri, paramsStr) = L.lookup "Location" (responseHeaders res) >>= return . B.break (== '?')
         let params = HTTP.parseQuery paramsStr
-        let Just session = deserialize . L.head . M.elems $ m
+        let session = Bin.decode . L.head . M.elems $ m
 
         responseStatus res `shouldBe` HTTP.status302
         redirectUri `shouldBe` oauth2AuthorizationUri (oauth2Config oauth2)
@@ -103,16 +103,16 @@ redirectAuthServerSpec =
         f "response_type" params `shouldBe` Just "code"
         f "scope" params `shouldBe` Just (oauth2Scope . oauth2Config $ oauth2)
         f "redirect_uri" params `shouldBe` Just (oauth2RedirectUri . oauth2Config $ oauth2)
-        f "state" params `shouldBe` (listToMaybe =<< DA.decode =<< HM.lookup "state" (sessionValue session))
+        f "state" params `shouldBe` (return . Bin.decode =<< HM.lookup "state" (sessionValue session))
 
 
 getAccessTokenSpec :: Spec
 getAccessTokenSpec = describe "get access token" $ do
     let stateToken = "test_state_token_000"
-        sd t = SessionData (HM.fromList [("state", DA.encode $ [stateToken])]) t t
+        sd t = SessionData (HM.fromList [("state", Bin.encode stateToken)]) t t
         sname = "SID"
         sid = "test_sid"
-        sessionStore t = M.fromList [(sid, serialize $ sd t)]
+        sessionStore t = M.fromList [(sid, Bin.encode $ sd t)]
         cookie = (HTTP.hCookie, sname `B.append` "=" `B.append` sid)
         request = Wai.defaultRequest { Wai.requestHeaders = [cookie] }
         accessToken = "test_access_token_111"

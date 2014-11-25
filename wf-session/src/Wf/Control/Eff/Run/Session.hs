@@ -10,13 +10,12 @@ import qualified Control.Eff.State.Strict as State (State, get, put, modify)
 import Wf.Control.Eff.Session (Session(..))
 import Control.Monad (when)
 
+import qualified Data.Binary as Bin (encode, decodeOrFail)
 import qualified Data.ByteString as B (ByteString, append)
 import qualified Data.ByteString.Char8 as B (pack)
 import qualified Data.List as L (lookup)
 import qualified Data.HashMap.Strict as HM (lookup, insert)
-import Data.Maybe (listToMaybe)
 import qualified Blaze.ByteString.Builder as Blaze (toByteString)
-import qualified Data.Aeson as DA (decode, encode)
 
 import qualified Web.Cookie as Cookie (parseCookies, renderSetCookie, def, setCookieName, setCookieValue, setCookieExpires, setCookieSecure)
 
@@ -61,7 +60,10 @@ runSession handler sessionSettings current requestSessionId eff = do
 
     handle (SessionGet k c) = do
         m <- return . HM.lookup k . sessionValue . sessionData =<< State.get
-        loop . c $ listToMaybe =<< DA.decode =<< m
+        loop . c $ eitherToMaybe . Bin.decodeOrFail =<< m
+
+        where
+        eitherToMaybe = either (const Nothing) (\(_,_,a) -> Just a)
 
     handle (SessionPut k v c) = do
         sd <- State.get
@@ -71,7 +73,7 @@ runSession handler sessionSettings current requestSessionId eff = do
 
         where
         f ses @ (SessionState _ d @ (SessionData m _ _)  _) = ses { sessionData = d { sessionValue = HM.insert k encoded m } }
-        encoded = DA.encode [v]
+        encoded = Bin.encode v
 
     handle (SessionTtl ttl' c) = do
         let expire = T.addSeconds current ttl'

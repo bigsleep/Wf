@@ -11,13 +11,13 @@ module Wf.Control.Eff.Session
 
 import Control.Eff (Eff, Member, inj, send)
 import Data.Typeable (Typeable)
+import Data.Binary (Binary)
 import qualified Data.ByteString as B (ByteString)
-import qualified Data.Aeson as DA (FromJSON, ToJSON)
 import qualified Network.HTTP.Types as HTTP (Header)
 
 data Session a =
-    forall b. (DA.FromJSON b) => SessionGet B.ByteString (Maybe b -> a) |
-    forall b. (DA.ToJSON b) => SessionPut B.ByteString b a |
+    forall b. (Binary b) => SessionGet B.ByteString (Maybe b -> a) |
+    forall b. (Binary b) => SessionPut B.ByteString b a |
     SessionTtl Integer a |
     SessionDestroy a |
     GetSessionId (B.ByteString -> a) |
@@ -32,10 +32,10 @@ instance Functor Session where
     fmap f (GetSessionId c) = GetSessionId (f . c)
     fmap f (RenderSetCookie c) = RenderSetCookie (f . c)
 
-sget :: (Member Session r, DA.FromJSON a) => B.ByteString -> Eff r (Maybe a)
+sget :: (Member Session r, Binary a) => B.ByteString -> Eff r (Maybe a)
 sget k = send $ inj . SessionGet k
 
-sput :: (Member Session r, DA.ToJSON a) => B.ByteString -> a -> Eff r ()
+sput :: (Member Session r, Binary a) => B.ByteString -> a -> Eff r ()
 sput k v = send $ \f -> inj . SessionPut k v $ f ()
 
 sttl :: (Member Session r) => Integer -> Eff r ()

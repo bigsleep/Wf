@@ -27,6 +27,7 @@ library
     extensible-effects >=1.4 && <1.8,
     hedis >=0.6 && <0.7,
     th-printf >=0.3 && <0.4,
+    binary >=0.7 && <0.8,
     wf-kvs,
     wf
   hs-source-dirs:      src
@@ -41,6 +42,7 @@ test-suite spec
     bytestring >=0.10 && <0.11,
     extensible-effects >=1.4 && <1.8,
     hedis >=0.6 && <0.7,
+    binary >=0.7 && <0.8,
     wf,
     wf-kvs,
     wf-kvs-redis,

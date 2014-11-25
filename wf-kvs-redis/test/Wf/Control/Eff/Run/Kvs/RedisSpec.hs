@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, TypeOperators, FlexibleContexts, TypeFamilies #-}
+{-# LANGUAGE OverloadedStrings, TypeOperators, FlexibleContexts, TypeFamilies, ScopedTypeVariables #-}
 module Wf.Control.Eff.Run.Kvs.RedisSpec
 ( kvsRedisSpec
 ) where
@@ -15,9 +15,8 @@ import Control.Concurrent (threadDelay)
 import Data.Either (isLeft, isRight, either)
 import qualified Database.Redis as Redis (get, set, setex, del, ConnectInfo(..), defaultConnectInfo, PortID(..), connect, runRedis, Status(..))
 import qualified Data.ByteString as B (ByteString)
-import qualified Data.ByteString.Char8 as B (pack)
 import qualified Data.ByteString.Lazy as L (ByteString, fromStrict, toStrict)
-import qualified Data.ByteString.Lazy.Char8 as L (pack)
+import qualified Data.Binary as Bin (encode, decode)
 
 import Wf.Application.Logger (Logger)
 import Wf.Application.Exception (Exception)
@@ -47,15 +46,16 @@ testConnectInfo = Redis.defaultConnectInfo { Redis.connectDatabase = 15 }
 setSpec :: Spec
 setSpec = do
     Q.prop "kvs-redis set" $
-        \val -> Q.ioProperty $ do
+        \(val :: String) -> Q.ioProperty $ do
             let key = "key1"
-            let code = Kvs.set () key (L.pack val)
+            let encoded = L.toStrict . Bin.encode $ val
+            let code = Kvs.set () key val
             r <- runTest code
             shouldSatisfy r isRight
             con <- Redis.connect testConnectInfo
             x <- Redis.runRedis con $ Redis.get key
-            let message = "expected: " ++ show val ++ " result: " ++ show x
-            return $ if (Right . Just . B.pack $ val) == x
+            let message = "expected: " ++ show encoded ++ " result: " ++ show x
+            return $ if (Right . Just $ encoded) == x
                         then Q.succeeded
                         else Q.failed { Q.reason = message}
 
@@ -64,13 +64,14 @@ setWithTtlSpec :: Spec
 setWithTtlSpec = describe "kvs-redis setWithTtl" $
     it "should store value within a time to live" $ do
         let key = "key2"
-        let val = "hello world"
+        let val = "hello world" :: String
         let ttl = 1
-        let code = Kvs.setWithTtl () key (L.pack val) ttl
+        let encoded = L.toStrict . Bin.encode $ val
+        let code = Kvs.setWithTtl () key val ttl
         Right () <- runTest code
         con <- Redis.connect testConnectInfo
         x <- Redis.runRedis con $ Redis.get key
-        x `shouldBe` (Right . Just . B.pack $ val)
+        x `shouldBe` (Right . Just $ encoded)
         threadDelay 1002000
         y <- Redis.runRedis con $ Redis.get key
         y `shouldBe` Right Nothing
@@ -79,14 +80,15 @@ setWithTtlSpec = describe "kvs-redis setWithTtl" $
 getSpec :: Spec
 getSpec = do
     Q.prop "kvs-redis get" $
-        \val -> Q.ioProperty $ do
+        \(val :: String) -> Q.ioProperty $ do
             let key = "key3"
+            let encoded = L.toStrict . Bin.encode $ val
             con <- Redis.connect testConnectInfo
-            Redis.runRedis con $ Redis.set key (B.pack val)
+            Redis.runRedis con $ Redis.set key encoded
             let code = Kvs.get () key
             (Right x) <- runTest code
             let message = "expected: " ++ show val ++ " result: " ++ show x
-            let result = if (Just . L.pack $ val) == x
+            let result = if (Just val) == x
                             then Q.succeeded
                             else Q.failed { Q.reason = message }
             return result
@@ -109,9 +111,9 @@ deleteSpec :: Spec
 deleteSpec = describe "kvs-redis delete" $
     it "should delete" $ do
         let key = "key5"
-        let val = "hoge"
+        let val = "hoge" :: String
         con <- Redis.connect testConnectInfo
-        Redis.runRedis con $ Redis.set key (B.pack val)
+        Redis.runRedis con $ Redis.set key (L.toStrict . Bin.encode $ val)
         let code = Kvs.delete () key
         r <- runTest code
         r `shouldBe` Right True
@@ -122,9 +124,9 @@ existsSpec :: Spec
 existsSpec = describe "kvs-redis exists" $ do
     it "should return true if key exists" $ do
         let key = "key6"
-        let val = "aaa"
+        let val = "aaa" :: String
         con <- Redis.connect testConnectInfo
-        Redis.runRedis con $ Redis.set key (B.pack val)
+        Redis.runRedis con $ Redis.set key (L.toStrict . Bin.encode $ val)
         let code = Kvs.exists () key
         r <- runTest code
         r `shouldBe` Right True

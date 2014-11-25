@@ -13,14 +13,13 @@ import Wf.Control.Eff.Logger (LogLevel(..), runLoggerStdIO)
 
 import Control.Exception (SomeException)
 
+import qualified Data.Binary as Bin (encode)
 import qualified Data.Map as M (Map, fromList, empty, member, null)
 import qualified Data.HashMap.Strict as HM (fromList)
 import qualified Data.ByteString as B (ByteString)
 import qualified Data.ByteString.Char8 as B (pack)
 import qualified Data.ByteString.Lazy as L (ByteString, fromStrict, toStrict)
 import qualified Data.ByteString.Lazy.Char8 as L (pack)
-import qualified Data.Aeson as DA (encode)
-import Wf.Data.Serializable (serialize)
 
 import Web.Cookie (SetCookie, renderCookies)
 import Blaze.ByteString.Builder (toByteString)
@@ -56,10 +55,10 @@ sessionSpec = describe "session" $ do
         let headers = [("Cookie", toByteString . renderCookies $ cookies)]
         let key = "hello"
         let val = ("world", 1, [3]) :: (String, Integer, [Integer])
-        let sval = HM.fromList [(key, DA.encode $ [val])]
+        let sval = HM.fromList [(key, Bin.encode val)]
         t <- getCurrentTime
         let expireDate = addSeconds t 10
-        let sd = serialize SessionData { sessionValue = sval, sessionStartDate = t, sessionExpireDate = expireDate }
+        let sd = Bin.encode SessionData { sessionValue = sval, sessionStartDate = t, sessionExpireDate = expireDate }
         let sessionState = M.fromList [(sid, sd)]
         let code = do
                     v <- sget key

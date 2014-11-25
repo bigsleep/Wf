@@ -12,15 +12,15 @@ module Wf.Control.Eff.Kvs
 ) where
 
 import Control.Eff (Eff, Member, inj, send)
-import Wf.Data.Serializable (Serializable)
 import Data.Typeable (Typeable)
+import qualified Data.Binary as Bin (Binary)
 
 type family KeyType kvs :: *
 
 data Kvs kvs a =
-    forall v. (Typeable v, Serializable v) => Get kvs (KeyType kvs) (Maybe v -> a) |
-    forall v. (Typeable v, Serializable v) => Set kvs (KeyType kvs) v a |
-    forall v. (Typeable v, Serializable v) => SetWithTtl kvs (KeyType kvs) v Integer a |
+    forall v. (Bin.Binary v) => Get kvs (KeyType kvs) (Maybe v -> a) |
+    forall v. (Bin.Binary v) => Set kvs (KeyType kvs) v a |
+    forall v. (Bin.Binary v) => SetWithTtl kvs (KeyType kvs) v Integer a |
     Delete kvs (KeyType kvs) (Bool -> a) |
     Exists kvs (KeyType kvs) (Bool -> a) |
     Ttl kvs (KeyType kvs) (Maybe Integer -> a) |
@@ -37,13 +37,13 @@ instance Functor (Kvs kvs) where
     fmap f (Keys kvs c) = Keys kvs (f . c)
 
 
-get :: (Typeable kvs, Typeable v, Serializable v, Member (Kvs kvs) r) => kvs -> KeyType kvs -> Eff r (Maybe v)
+get :: (Typeable kvs, Bin.Binary v, Member (Kvs kvs) r) => kvs -> KeyType kvs -> Eff r (Maybe v)
 get kvs k = send $ inj . Get kvs k
 
-set :: (Typeable kvs, Typeable v, Serializable v, Member (Kvs kvs) r) => kvs -> KeyType kvs -> v -> Eff r ()
+set :: (Typeable kvs, Bin.Binary v, Member (Kvs kvs) r) => kvs -> KeyType kvs -> v -> Eff r ()
 set kvs k v = send $ \f -> inj . Set kvs k v $ f ()
 
-setWithTtl :: (Typeable kvs, Typeable v, Serializable v, Member (Kvs kvs) r) => kvs -> KeyType kvs -> v -> Integer -> Eff r ()
+setWithTtl :: (Typeable kvs, Bin.Binary v, Member (Kvs kvs) r) => kvs -> KeyType kvs -> v -> Integer -> Eff r ()
 setWithTtl kvs k v t = send $ \f -> inj . SetWithTtl kvs k v t $ f ()
 
 delete :: (Typeable kvs, Member (Kvs kvs) r) => kvs -> KeyType kvs -> Eff r Bool

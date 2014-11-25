@@ -19,7 +19,7 @@ import Control.Exception (Exception)
 
 import Data.Typeable (Typeable)
 import qualified Data.ByteString as B (ByteString)
-import Wf.Data.Serializable (Serializable)
+import qualified Data.Binary as Bin (Binary)
 
 data DefaultKvs = DefaultKvs deriving (Show, Typeable)
 
@@ -34,13 +34,13 @@ data KvsError =
 
 instance Exception KvsError
 
-get :: (Typeable v, Serializable v, Member Kvs r) => B.ByteString -> Eff r (Maybe v)
+get :: (Typeable v, Bin.Binary v, Member Kvs r) => B.ByteString -> Eff r (Maybe v)
 get = Wf.Control.Eff.Kvs.get DefaultKvs
 
-set :: (Typeable v, Serializable v, Member Kvs r) => B.ByteString -> v -> Eff r ()
+set :: (Typeable v, Bin.Binary v, Member Kvs r) => B.ByteString -> v -> Eff r ()
 set = Wf.Control.Eff.Kvs.set DefaultKvs
 
-setWithTtl :: (Typeable v, Serializable v, Member Kvs r) => B.ByteString -> v -> Integer -> Eff r ()
+setWithTtl :: (Typeable v, Bin.Binary v, Member Kvs r) => B.ByteString -> v -> Integer -> Eff r ()
 setWithTtl = Wf.Control.Eff.Kvs.setWithTtl DefaultKvs
 
 delete :: (Member Kvs r) => B.ByteString -> Eff r Bool

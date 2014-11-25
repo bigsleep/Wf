@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, TypeOperators, FlexibleContexts, TypeFamilies, QuasiQuotes #-}
+{-# LANGUAGE OverloadedStrings, TypeOperators, FlexibleContexts, TypeFamilies, QuasiQuotes, DeriveGeneric #-}
 module Wf.Control.Eff.Run.Kvs.Redis
 ( runKvsRedis
 ) where
@@ -8,10 +8,11 @@ import Control.Eff.Lift (Lift, lift)
 import qualified Wf.Control.Eff.Kvs as Kvs (Kvs(..), KeyType)
 
 import qualified Database.Redis as Redis (get, set, setex, del, exists, ttl, keys, ConnectInfo, connect, runRedis, Status(..))
+import qualified Data.Binary as Bin (Binary(..), encode, decodeOrFail)
 import qualified Data.ByteString as B (ByteString)
 import qualified Data.ByteString.Lazy as L (toStrict, fromStrict)
 import Data.Typeable (Typeable)
-import Wf.Data.Serializable (serialize, deserialize)
+import GHC.Generics (Generic)
 import Text.Printf.TH (s)
 
 import Wf.Application.Kvs (KvsError(..))
@@ -36,28 +37,28 @@ runKvsRedis cinfo eff = do
           handleRedis cn redis handleResult' = (lift . Redis.runRedis cn $ redis) >>= handleResult'
 
           handle cn (Kvs.Get _ k c) = handleRedis cn (Redis.get k) handleResult
-            where handleResult (Right x) = loop cn . c $ (x >>= deserialize . L.fromStrict)
+            where handleResult (Right x) = loop cn . c $ (x >>= either (const Nothing) (\(_,_,a) -> Just a) . Bin.decodeOrFail . L.fromStrict)
 
                   handleResult (Left x) = do
                     logError $ [s|redis get failure. key=%s reply=%s|] k (show x)
                     throwException $ KvsError "redis get failure."
 
-          handle cn (Kvs.Set _ k v c) = handleRedis cn (Redis.set k . L.toStrict . serialize $ v) handleResult
+          handle cn (Kvs.Set _ k v c) = handleRedis cn (Redis.set k . L.toStrict . Bin.encode $ v) handleResult
             where handleResult (Right Redis.Ok) = do
-                    logDebug $ [s|redis set success. key=%s value=%s status=Ok|] k (serialize v)
+                    logDebug $ [s|redis set success. key=%s status=Ok|] k
                     loop cn c
 
                   handleResult r = do
-                    logError $ [s|redis set failure. key=%s value=%s reply=%s|] k (serialize v) (show r)
+                    logError $ [s|redis set failure. key=%s reply=%s|] k (show r)
                     throwException $ KvsError "kvs set failure."
 
-          handle cn (Kvs.SetWithTtl _ k v ttl c) = handleRedis cn (Redis.setex k ttl . L.toStrict . serialize $ v) handleResult
+          handle cn (Kvs.SetWithTtl _ k v ttl c) = handleRedis cn (Redis.setex k ttl . L.toStrict . Bin.encode $ v) handleResult
             where handleResult (Right Redis.Ok) = do
-                    logDebug $ [s|redis setex success. key=%s ttl=%d value=%s status=Ok|] k ttl (serialize v)
+                    logDebug $ [s|redis setex success. key=%s ttl=%d status=Ok|] k ttl
                     loop cn c
 
                   handleResult x = do
-                    logError $ [s|redis setex failure. key=%s ttl=%d value=%s reply=%s|] k ttl (serialize v) (show x)
+                    logError $ [s|redis setex failure. key=%s ttl=%d reply=%s|] k ttl (show x)
                     throwException $ KvsError "set with ttl failure."
 
           handle cn (Kvs.Delete _ k c) = handleRedis cn (Redis.del [k]) handleResult

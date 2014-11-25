@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, TypeOperators, FlexibleContexts, TemplateHaskell, TypeFamilies #-}
+{-# LANGUAGE OverloadedStrings, TypeOperators, FlexibleContexts, TemplateHaskell, TypeFamilies, DeriveGeneric #-}
 module Main where
 
 import Control.Eff (Member, Eff, (:>))
@@ -12,12 +12,14 @@ import Control.Exception (SomeException(..))
 import qualified Data.List as List (lookup)
 import Data.Either (either)
 import Data.Typeable (cast)
+import qualified Data.Binary as Bin (Binary(..))
 import qualified Data.ByteString as B (ByteString, append)
 import qualified Data.ByteString.Char8 as B (pack)
 import qualified Data.ByteString.Lazy as L (ByteString, readFile, length, empty)
 import qualified Data.Aeson as DA (Value(..), FromJSON(..), decode, encode, (.:))
 import qualified Data.Aeson.TH as DA (deriveJSON, defaultOptions)
 import qualified Database.Redis as Redis (ConnectInfo)
+import GHC.Generics (Generic)
 
 import qualified Network.Wai as Wai (Request, Response, defaultRequest, requestHeaders, responseLBS, responseStatus, responseHeaders)
 import qualified Network.HTTP.Client as N (Request(..), RequestBody(..), Response(..), Manager, parseUrl, newManager, defaultManagerSettings)
@@ -31,7 +33,7 @@ import Wf.Control.Eff.Run.Authenticate.OAuth2 (runAuthenticateOAuth2)
 import Wf.Web.Authenticate.OAuth2 (OAuth2(..), OAuth2Error(..))
 import Wf.Network.Http.Types (Request, Response, defaultResponse, requestMethod, requestRawPath, requestHeaders, requestQuery)
 import Wf.Network.Http.Response (setStatus, addHeader, setHeaders, redirect, setBody, file, json)
-import Wf.Network.Wai (toWaiResponse, toWaiApplication)
+import Wf.Network.Wai (fromWaiRequest, toWaiResponse, toWaiApplication)
 import Wf.Web.Session (Session, sget, sput, sdestroy, renderSetCookie, SessionState, defaultSessionState, SessionSettings(sessionName), getRequestSessionId)
 import Wf.Control.Eff.Run.Session.Stm (SessionStore, initializeSessionStore, runSessionStm)
 import Wf.Web.Api (apiRoutes, getApi, postApi)
@@ -45,9 +47,11 @@ data User = User
     { userId :: B.ByteString
     , userName :: B.ByteString
     , userEmail :: B.ByteString
-    } deriving (Show, Eq)
+    } deriving (Show, Eq, Generic)
 
 DA.deriveJSON DA.defaultOptions ''User
+
+instance Bin.Binary User
 
 newtype GoogleUser = GoogleUser { unGoogleUser :: User } deriving (Show, Eq)
 
@@ -93,15 +97,13 @@ type M = Eff
     :> Lift IO
     :> ())
 
-routes :: B.ByteString -> Request L.ByteString -> M Wai.Response
-routes uri request = apiRoutes rootApp rs request method path
+routes :: B.ByteString -> Wai.Request -> M Wai.Response
+routes uri = apiRoutes rootApp rs
     where
-    rs = [ getApi "/" (const rootApp)
-         , postApi "/login" (const loginApp)
+    rs = [ getApi "/" (const rootApp :: Wai.Request -> M Wai.Response)
+         , postApi "/login" loginApp
          , getApi "/oauth2callback" (oauth2CallbackApp uri)
          ]
-    method = requestMethod request
-    path = requestRawPath request
 
 instance AuthenticationType () where
     type AuthenticationKeyType () = (B.ByteString, B.ByteString)
@@ -115,12 +117,13 @@ rootApp = do
          Just user -> return . toWaiResponse . json (DA.encode user) $ defaultResponse ()
          Nothing -> return . toWaiResponse . file "static/index.html" $ defaultResponse ()
 
-loginApp :: M Wai.Response
-loginApp = fmap toWaiResponse $ authenticationTransfer () $ defaultResponse ()
+loginApp :: Wai.Request -> M Wai.Response
+loginApp _ = fmap toWaiResponse $ authenticationTransfer () $ defaultResponse ()
 
-oauth2CallbackApp :: B.ByteString -> Request L.ByteString -> M Wai.Response
+oauth2CallbackApp :: B.ByteString -> Wai.Request -> M Wai.Response
 oauth2CallbackApp uri req = do
-    let maybeCode = id =<< (List.lookup "code" . requestQuery $ req)
+    req' <- lift (fromWaiRequest req :: IO (Request L.ByteString))
+    let maybeCode = id =<< (List.lookup "code" . requestQuery $ req')
     maybeState <- sget "state"
 
     logDebug $ "state code " ++ show (maybeState, maybeCode)
@@ -140,8 +143,8 @@ run :: OAuth2 User
     -> N.Manager
     -> SessionStore
     -> SessionSettings
-    -> (Request L.ByteString -> M Wai.Response)
-    -> Request L.ByteString
+    -> (Wai.Request -> M Wai.Response)
+    -> Wai.Request
     -> IO Wai.Response
 run oauth2 manager sessionStore sessionSettings app request = do
     t <- getCurrentTime
@@ -160,7 +163,7 @@ run oauth2 manager sessionStore sessionSettings app request = do
         . app
     internalError = toWaiResponse . setStatus HTTP.status500 . file "oauth2-example/static/error.html" $ defaultResponse ()
     sname = sessionName sessionSettings
-    requestSessionId = getRequestSessionId sname . requestHeaders $ request
+    requestSessionId = getRequestSessionId sname . Wai.requestHeaders $ request
     handleError (Left (SomeException e)) = do
         lift $ print e
         case cast e of

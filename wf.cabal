@@ -24,7 +24,6 @@ library
     Wf.Web.Api,
     Wf.Web.JsonApi,
     Wf.Web.Routing,
-    Wf.Data.Serializable,
     Wf.Network.Wai,
     Wf.Network.Http.Response,
     Wf.Network.Http.Types,
@@ -46,7 +45,8 @@ library
     blaze-builder >=0.3 && <0.4,
     aeson >=0.6 && <0.7,
     reflection,
-    wai >=3.0.1 && <3.1
+    wai >=3.0.1 && <3.1,
+    binary >=0.7 && <0.8
   hs-source-dirs:      src
   default-language:    Haskell2010
 
