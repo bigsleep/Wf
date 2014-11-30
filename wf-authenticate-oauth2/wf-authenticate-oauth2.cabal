@@ -32,6 +32,7 @@ library
     random >=1.1 && <1.2,
     http-types >=0.7 && <0.9,
     http-client >=0.3 && <0.4,
+    wai,
     wf,
     wf-session,
     wf-authenticate

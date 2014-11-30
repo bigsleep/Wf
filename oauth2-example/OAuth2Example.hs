@@ -102,7 +102,7 @@ routes uri = apiRoutes rootApp rs
          ]
 
 instance AuthenticationType () where
-    type AuthenticationKeyType () = (B.ByteString, B.ByteString)
+    type AuthenticationKeyType () = ()
     type AuthenticationUserType () = User
 
 rootApp :: M Wai.Response
@@ -119,13 +119,7 @@ loginApp _ = fmap toWaiResponse $ authenticationTransfer () $ defaultResponse ()
 oauth2CallbackApp :: B.ByteString -> Wai.Request -> M Wai.Response
 oauth2CallbackApp uri req = do
     req' <- lift (fromWaiRequest req :: IO (Request L.ByteString))
-    let maybeCode = id =<< (List.lookup "code" . requestQuery $ req')
-    maybeState <- queryParam "state"
-
-    logDebug $ "state code " ++ show (maybeState, maybeCode)
-    user <- case (maybeState, maybeCode) of
-                 (Just state, Just code) -> authenticate () (code, state)
-                 _ -> throwException $ redirect (uri `B.append` "/login") $ defaultResponse ()
+    user <- authenticate () ()
 
     logDebug $ "loginUser: " ++ show user
 
