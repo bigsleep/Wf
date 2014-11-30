@@ -28,6 +28,7 @@ import Wf.Control.Eff.Authenticate (Authenticate, AuthenticationType(..), authen
 import Wf.Control.Eff.Run.Authenticate.OAuth2 (runAuthenticateOAuth2)
 import Wf.Web.Authenticate.OAuth2 (OAuth2(..))
 import Wf.Network.Http.Types (Request, defaultResponse, requestQuery)
+import Wf.Network.Http.Request (queryParam)
 import Wf.Network.Http.Response (setStatus, addHeader, redirect, file, json)
 import Wf.Network.Wai (fromWaiRequest, toWaiResponse, toWaiApplication)
 import Wf.Session.Stm (Session, sget, sput, sdestroy, renderSetCookie, initializeSessionStore, SessionSettings, SessionStore, runSessionStm)
@@ -119,7 +120,7 @@ oauth2CallbackApp :: B.ByteString -> Wai.Request -> M Wai.Response
 oauth2CallbackApp uri req = do
     req' <- lift (fromWaiRequest req :: IO (Request L.ByteString))
     let maybeCode = id =<< (List.lookup "code" . requestQuery $ req')
-    maybeState <- sget "state"
+    maybeState <- queryParam "state"
 
     logDebug $ "state code " ++ show (maybeState, maybeCode)
     user <- case (maybeState, maybeCode) of
