@@ -6,7 +6,7 @@ module Wf.Control.Eff.Run.Session.Kvs
 import qualified Data.ByteString as B (ByteString)
 
 import Control.Eff (Eff, (:>), Member, SetMember)
-import qualified Control.Eff.State.Strict as State (State)
+import Control.Eff.Reader.Strict (Reader)
 import Control.Eff.Lift (Lift, lift)
 import Wf.Control.Eff.Session (Session(..))
 import qualified Wf.Control.Eff.Kvs as Kvs (Kvs, get, setWithTtl, delete, exists)
@@ -14,11 +14,12 @@ import qualified Wf.Control.Eff.Kvs as Kvs (Kvs, get, setWithTtl, delete, exists
 import Control.Monad (when, void)
 import Control.Applicative ((<$>), (<*>))
 
-import Wf.Web.Session.Types (SessionHandler(..), SessionState(..), SessionData(..), SessionSettings(..), SessionKvs(..), defaultSessionState, defaultSessionData)
+import Wf.Session.Types (SessionHandler(..), SessionState(..), SessionData(..), SessionSettings(..), SessionKvs(..), defaultSessionState, defaultSessionData)
 import Wf.Application.Exception (Exception)
 import Wf.Application.Logger (Logger, logDebug, logInfo)
 import qualified Wf.Application.Time as T (Time, addSeconds, diffTime)
 import Wf.Control.Eff.Run.Session (genSessionId, runSession)
+import qualified Network.Wai as Wai (Request)
 
 import Text.Printf.TH (s)
 
@@ -28,12 +29,11 @@ runSessionKvs
     ( Member Exception r
     , Member Logger r
     , Member (Kvs.Kvs SessionKvs) r
-    , Member (State.State SessionState) r
+    , Member (Reader Wai.Request) r
     , SetMember Lift (Lift IO) r
     )
     => SessionSettings
     -> T.Time
-    -> Maybe B.ByteString
     -> Eff (Session :> r) a
     -> Eff r a
 runSessionKvs = runSession sessionHandlerKvs
@@ -107,7 +107,7 @@ loadSession current requestSessionId = do
             logDebug $ [s|load session. sessionId=%s sessionData=%s|] sid (show sd)
             return SessionState { sessionId = sid, sessionData = sd, isNew = False }
         | otherwise = do
-            Kvs.delete SessionKvs sid
+            _ <- Kvs.delete SessionKvs sid
             return defaultSessionState
 
 

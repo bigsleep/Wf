@@ -1,43 +1,38 @@
 {-# LANGUAGE OverloadedStrings, TypeOperators, FlexibleContexts, TemplateHaskell, TypeFamilies, DeriveGeneric #-}
 module Main where
 
-import Control.Eff (Member, Eff, (:>))
-import Control.Eff.State.Strict (State, evalState)
-import Control.Eff.Reader.Strict (Reader, ask, runReader)
+import Control.Eff (Eff, (:>))
+import Control.Eff.Reader.Strict (Reader, runReader)
 import Control.Eff.Exception (runExc)
 import Control.Eff.Lift (Lift, runLift, lift)
-import Control.Monad (mzero, unless)
+import Control.Monad (mzero)
 import Control.Exception (SomeException(..))
 
 import qualified Data.List as List (lookup)
-import Data.Either (either)
 import Data.Typeable (cast)
 import qualified Data.Binary as Bin (Binary(..))
 import qualified Data.ByteString as B (ByteString, append)
-import qualified Data.ByteString.Char8 as B (pack)
-import qualified Data.ByteString.Lazy as L (ByteString, readFile, length, empty)
+import qualified Data.ByteString.Lazy as L (ByteString, readFile)
 import qualified Data.Aeson as DA (Value(..), FromJSON(..), decode, encode, (.:))
 import qualified Data.Aeson.TH as DA (deriveJSON, defaultOptions)
-import qualified Database.Redis as Redis (ConnectInfo)
 import GHC.Generics (Generic)
 
-import qualified Network.Wai as Wai (Request, Response, defaultRequest, requestHeaders, responseLBS, responseStatus, responseHeaders)
-import qualified Network.HTTP.Client as N (Request(..), RequestBody(..), Response(..), Manager, parseUrl, newManager, defaultManagerSettings)
+import qualified Network.Wai as Wai (Request, Response)
+import qualified Network.HTTP.Client as N (Manager, newManager)
 import qualified Network.HTTP.Client.TLS as N (tlsManagerSettings)
-import qualified Network.HTTP.Types as HTTP (Method, hContentType, hContentLength, status500)
+import qualified Network.HTTP.Types as HTTP (status500)
 import qualified Network.Wai.Handler.Warp as Warp (run)
 
-import Wf.Control.Eff.HttpClient (HttpClient, httpClient, runHttpClient)
+import Wf.Control.Eff.HttpClient (HttpClient, runHttpClient)
 import Wf.Control.Eff.Authenticate (Authenticate, AuthenticationType(..), authenticate, authenticationTransfer)
 import Wf.Control.Eff.Run.Authenticate.OAuth2 (runAuthenticateOAuth2)
-import Wf.Web.Authenticate.OAuth2 (OAuth2(..), OAuth2Error(..))
-import Wf.Network.Http.Types (Request, Response, defaultResponse, requestMethod, requestRawPath, requestHeaders, requestQuery)
-import Wf.Network.Http.Response (setStatus, addHeader, setHeaders, redirect, setBody, file, json)
+import Wf.Web.Authenticate.OAuth2 (OAuth2(..))
+import Wf.Network.Http.Types (Request, defaultResponse, requestQuery)
+import Wf.Network.Http.Response (setStatus, addHeader, redirect, file, json)
 import Wf.Network.Wai (fromWaiRequest, toWaiResponse, toWaiApplication)
-import Wf.Web.Session (Session, sget, sput, sdestroy, renderSetCookie, SessionState, defaultSessionState, SessionSettings(sessionName), getRequestSessionId)
-import Wf.Control.Eff.Run.Session.Stm (SessionStore, initializeSessionStore, runSessionStm)
+import Wf.Session.Stm (Session, sget, sput, sdestroy, renderSetCookie, initializeSessionStore, SessionSettings, SessionStore, runSessionStm)
 import Wf.Web.Api (apiRoutes, getApi, postApi)
-import Wf.Application.Time (Time, getCurrentTime)
+import Wf.Application.Time (getCurrentTime)
 import Wf.Application.Exception (Exception, throwException)
 import Wf.Application.Logger (Logger, logDebug, runLoggerStdIO, LogLevel(..))
 
@@ -91,7 +86,7 @@ type M = Eff
     (  Authenticate ()
     :> HttpClient
     :> Session
-    :> State SessionState
+    :> Reader Wai.Request
     :> Logger
     :> Exception
     :> Lift IO
@@ -156,14 +151,12 @@ run oauth2 manager sessionStore sessionSettings app request = do
         . (>>= handleError)
         . runExc
         . runLoggerStdIO DEBUG
-        . evalState defaultSessionState
-        . runSessionStm sessionStore sessionSettings t requestSessionId
+        . flip runReader request
+        . runSessionStm sessionStore sessionSettings t
         . runHttpClient manager
         . runAuthenticateOAuth2 oauth2
         . app
     internalError = toWaiResponse . setStatus HTTP.status500 . file "oauth2-example/static/error.html" $ defaultResponse ()
-    sname = sessionName sessionSettings
-    requestSessionId = getRequestSessionId sname . Wai.requestHeaders $ request
     handleError (Left (SomeException e)) = do
         lift $ print e
         case cast e of

@@ -17,7 +17,6 @@ cabal-version:       >=1.20
 
 library
   exposed-modules:
-    Wf.Web,
     Wf.Control.Eff.Logger,
     Wf.Control.Eff.HttpClient,
     Wf.Control.Eff.Run.Logger.File,

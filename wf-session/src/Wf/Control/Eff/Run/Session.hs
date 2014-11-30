@@ -6,7 +6,7 @@ module Wf.Control.Eff.Run.Session
 ) where
 
 import Control.Eff (Eff, VE(..), (:>), Member, admin, handleRelay)
-import qualified Control.Eff.State.Strict as State (State, get, put, modify)
+import Control.Eff.Reader.Strict (Reader, ask)
 import Wf.Control.Eff.Session (Session(..))
 import Control.Monad (when)
 
@@ -16,29 +16,28 @@ import qualified Data.ByteString.Char8 as B (pack)
 import qualified Data.List as L (lookup)
 import qualified Data.HashMap.Strict as HM (lookup, insert)
 import qualified Blaze.ByteString.Builder as Blaze (toByteString)
+import qualified Network.Wai as Wai (Request, requestHeaders)
 
 import qualified Web.Cookie as Cookie (parseCookies, renderSetCookie, def, setCookieName, setCookieValue, setCookieExpires, setCookieSecure)
 
 import System.Random (newStdGen, randomRs)
 
-import Wf.Network.Http.Types (RequestHeader)
-import Wf.Web.Session.Types (SessionState(..), SessionData(..), SessionSettings(..), SessionHandler(..), defaultSessionState)
+import Wf.Session.Types (SessionState(..), SessionData(..), SessionSettings(..), SessionHandler(..), defaultSessionState)
 import qualified Wf.Application.Time as T (Time, formatTime, addSeconds)
 
 runSession
     ::
-    ( Member (State.State SessionState) r
-    )
+    Member (Reader Wai.Request) r
     => SessionHandler (Eff r)
     -> SessionSettings
     -> T.Time
-    -> Maybe B.ByteString
     -> Eff (Session :> r) a
     -> Eff r a
-runSession handler sessionSettings current requestSessionId eff = do
-    State.put =<< loadSession
-    r <- loop . admin $ eff
-    saveSession =<< State.get
+runSession handler sessionSettings current eff = do
+    requestSessionId <- fmap (getRequestSessionId sname) ask
+    s <- loadSession requestSessionId
+    (r, s') <- loop s . admin $ eff
+    saveSession s'
     return r
 
     where
@@ -46,67 +45,67 @@ runSession handler sessionSettings current requestSessionId eff = do
 
     isSecure = sessionIsSecure sessionSettings
 
-    loop (Val a) = return a
+    loop s (Val a) = return (a, s)
 
-    loop (E u) = handleRelay u loop handle
+    loop s (E u) = handleRelay u (loop s) (handle s)
 
     newSession = sessionHandlerNew handler sessionSettings current
 
-    loadSession = sessionHandlerLoad handler current requestSessionId
+    loadSession requestSessionId = sessionHandlerLoad handler current requestSessionId
 
     saveSession = sessionHandlerSave handler current
 
     sessionDestroy = sessionHandlerDestroy handler
 
-    handle (SessionGet k c) = do
-        m <- return . HM.lookup k . sessionValue . sessionData =<< State.get
-        loop . c $ eitherToMaybe . Bin.decodeOrFail =<< m
+    handle s (SessionGet k c) = do
+        let m = HM.lookup k . sessionValue . sessionData $ s
+        loop s . c $ eitherToMaybe . Bin.decodeOrFail =<< m
 
         where
         eitherToMaybe = either (const Nothing) (\(_,_,a) -> Just a)
 
-    handle (SessionPut k v c) = do
-        sd <- State.get
-        when (sessionId sd == "") (State.put =<< newSession)
-        State.modify f
-        loop c
+    handle s (SessionPut k v c) = do
+        s' <- if sessionId s == ""
+                 then newSession
+                 else return s
+        loop (f s') c
 
         where
         f ses @ (SessionState _ d @ (SessionData m _ _)  _) = ses { sessionData = d { sessionValue = HM.insert k encoded m } }
         encoded = Bin.encode v
 
-    handle (SessionTtl ttl' c) = do
-        let expire = T.addSeconds current ttl'
-        State.modify (f expire)
-        loop c
+    handle s (SessionTtl ttl' c) = do
+        loop (f s) c
 
         where
-        f expire ses @ (SessionState _ d _) = ses { sessionData = d { sessionExpireDate = expire } }
+        expire = T.addSeconds current ttl'
+        f ses @ (SessionState _ d _) = ses { sessionData = d { sessionExpireDate = expire } }
 
-    handle (SessionDestroy c) = do
-        sid <- fmap sessionId State.get
+    handle s (SessionDestroy c) = do
         when (sid /= "") (sessionDestroy sid)
-        State.put defaultSessionState
-        loop c
+        loop defaultSessionState c
 
-    handle (GetSessionId c) =
-        loop . c . sessionId =<< State.get
+        where
+        sid = sessionId s
 
-    handle (RenderSetCookie c) = do
-        session <- State.get
-        let sid = sessionId session
-            expire = sessionExpireDate . sessionData $ session
-            setCookie = Cookie.def
-                      { Cookie.setCookieName = sname
-                      , Cookie.setCookieValue = sid
-                      , Cookie.setCookieExpires = Just expire
-                      , Cookie.setCookieSecure = isSecure
-                      }
-        loop . c $ ("Set-Cookie", Blaze.toByteString . Cookie.renderSetCookie $ setCookie)
+    handle s (GetSessionId c) =
+        loop s . c . sessionId $ s
 
+    handle s (RenderSetCookie c) = do
+        loop s . c $ ("Set-Cookie", Blaze.toByteString . Cookie.renderSetCookie $ setCookie)
 
-getRequestSessionId :: B.ByteString -> [RequestHeader] -> Maybe B.ByteString
-getRequestSessionId name = (L.lookup name =<<) . fmap Cookie.parseCookies . L.lookup "Cookie"
+        where
+        sid = sessionId s
+        expire = sessionExpireDate . sessionData $ s
+        setCookie = Cookie.def
+                  { Cookie.setCookieName = sname
+                  , Cookie.setCookieValue = sid
+                  , Cookie.setCookieExpires = Just expire
+                  , Cookie.setCookieSecure = isSecure
+                  }
+
+getRequestSessionId :: B.ByteString -> Wai.Request -> Maybe B.ByteString
+getRequestSessionId name = (L.lookup name =<<) . fmap Cookie.parseCookies . L.lookup "Cookie" . Wai.requestHeaders
 
 genRandomByteString :: Int -> IO B.ByteString
 genRandomByteString len = return . B.pack . take len . map (chars !!) . randomRs (0, length chars - 1) =<< newStdGen

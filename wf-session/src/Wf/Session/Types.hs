@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings, DeriveDataTypeable, DeriveGeneric, TypeFamilies, TemplateHaskell, StandaloneDeriving, ExistentialQuantification #-}
-module Wf.Web.Session.Types
+module Wf.Session.Types
 ( SessionState(..)
 , SessionData(..)
 , SessionSettings(..)

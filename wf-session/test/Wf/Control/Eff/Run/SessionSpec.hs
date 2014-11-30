@@ -27,9 +27,10 @@ import Blaze.ByteString.Builder (toByteString)
 import Wf.Application.Logger (Logger, logDebug)
 import Wf.Control.Eff.Run.Kvs.Map (runKvsMap)
 import Wf.Application.Exception (Exception(..))
-import Wf.Web.Session (Session(..), sget, sput, sttl, sdestroy, getSessionId, runSession, SessionKvs(..), SessionError(..), SessionState(..), SessionData(..), SessionSettings(..), defaultSessionState, defaultSessionData, getRequestSessionId)
-import Wf.Control.Eff.Run.Session.Kvs (runSessionKvs)
+import Wf.Session.Kvs (Session(..), sget, sput, sttl, sdestroy, getSessionId, SessionKvs(..), SessionError(..), SessionState(..), SessionData(..), SessionSettings(..), defaultSessionState, defaultSessionData, runSessionKvs)
+import Wf.Control.Eff.Run.Session (runSession)
 import Wf.Application.Time (Time, getCurrentTime, addSeconds)
+import qualified Network.Wai as Wai (Request(..), defaultRequest)
 
 import Test.Hspec (Spec, describe, it, shouldBe, shouldSatisfy)
 import qualified Test.Hspec.QuickCheck as Q
@@ -45,7 +46,7 @@ sessionSpec = describe "session" $ do
                     sput key val
                     sttl 10
                     getSessionId
-        Right (s, sid) <- runTest "SID" t Nothing False M.empty code
+        Right (s, sid) <- runTest "SID" t Wai.defaultRequest False M.empty code
         shouldSatisfy s (M.member sid)
 
     it "restore automatically" $ do
@@ -53,6 +54,7 @@ sessionSpec = describe "session" $ do
         let sid = "testSessionId000"
         let cookies = [(name, sid)]
         let headers = [("Cookie", toByteString . renderCookies $ cookies)]
+        let request = Wai.defaultRequest { Wai.requestHeaders = headers }
         let key = "hello"
         let val = ("world", 1, [3]) :: (String, Integer, [Integer])
         let sval = HM.fromList [(key, Bin.encode val)]
@@ -64,7 +66,7 @@ sessionSpec = describe "session" $ do
                     v <- sget key
                     sid' <- getSessionId
                     return (v, sid')
-        Right (_, result) <- runTest name t (getRequestSessionId name headers) False sessionState code
+        Right (_, result) <- runTest name t request False sessionState code
         result `shouldBe` (Just val, sid)
 
     it "destroy" $ do
@@ -77,7 +79,7 @@ sessionSpec = describe "session" $ do
                     sdestroy
                     after <- getSessionId
                     return (before, after)
-        Right (s, (_, afterId)) <- runTest "SID" t Nothing False M.empty code
+        Right (s, (_, afterId)) <- runTest "SID" t Wai.defaultRequest False M.empty code
         afterId `shouldBe` ""
         shouldSatisfy s M.null
 
@@ -85,24 +87,24 @@ sessionSpec = describe "session" $ do
 
 runTest :: B.ByteString ->
            Time ->
-           Maybe B.ByteString ->
+           Wai.Request ->
            Bool ->
            M.Map B.ByteString L.ByteString ->
            Eff ( Session
+              :> Reader Wai.Request
               :> Kvs.Kvs SessionKvs
               :> State (M.Map B.ByteString L.ByteString)
-              :> State SessionState
               :> Exception
               :> Logger
               :> Lift IO
               :> ()) a ->
            IO (Either SomeException (M.Map B.ByteString L.ByteString, a))
-runTest name t requestSessionId isSecure s a = do
+runTest name t request isSecure s a = do
     let ssettings = SessionSettings name isSecure 0 40
     runLift
         . runLoggerStdIO DEBUG
         . runExc
-        . evalState defaultSessionState
         . runState s
         . runKvsMap
-        . runSessionKvs ssettings t requestSessionId $ a
+        . flip runReader request
+        . runSessionKvs ssettings t $ a

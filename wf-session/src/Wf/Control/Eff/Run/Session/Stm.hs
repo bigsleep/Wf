@@ -11,17 +11,18 @@ import qualified Data.HashMap.Strict as HM (HashMap, lookup, insert, delete, emp
 import Control.Concurrent.STM (STM, TVar, newTVar, readTVar, modifyTVar', atomically)
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Eff (Eff, (:>), Member, SetMember)
-import qualified Control.Eff.State.Strict as State (State)
+import Control.Eff.Reader.Strict (Reader)
 import Control.Eff.Lift (Lift, lift)
 import Control.Monad (when, void, forever)
 import Control.Applicative ((<$>), (<*>))
 
 import Wf.Control.Eff.Session (Session(..))
 import Wf.Control.Eff.Run.Session (genSessionId, runSession)
-import Wf.Web.Session.Types (SessionState(..), SessionData(..), SessionSettings(..), SessionHandler(..), defaultSessionState, defaultSessionData)
+import Wf.Session.Types (SessionState(..), SessionData(..), SessionSettings(..), SessionHandler(..), defaultSessionState, defaultSessionData)
 import Wf.Application.Exception (Exception)
 import Wf.Application.Logger (Logger, logDebug, logInfo)
 import qualified Wf.Application.Time as T (Time, addSeconds, diffTime, getCurrentTime)
+import qualified Network.Wai as Wai (Request)
 
 import Text.Printf.TH (s)
 
@@ -45,13 +46,12 @@ runSessionStm
     ::
     ( Member Exception r
     , Member Logger r
-    , Member (State.State SessionState) r
+    , Member (Reader Wai.Request) r
     , SetMember Lift (Lift IO) r
     )
     => SessionStore
     -> SessionSettings
     -> T.Time
-    -> Maybe B.ByteString
     -> Eff (Session :> r) a
     -> Eff r a
 
@@ -167,4 +167,3 @@ destroySession
     -> B.ByteString
     -> Eff r ()
 destroySession (SessionStore tv) = lift . atomically . modifyTVar' tv . HM.delete
-

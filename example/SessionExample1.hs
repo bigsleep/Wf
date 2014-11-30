@@ -2,25 +2,23 @@
 module Main where
 
 import Control.Eff (Member, Eff, (:>))
-import Control.Eff.State.Strict (State, evalState)
-import Control.Eff.Reader.Strict (Reader, ask, runReader)
+import Control.Eff.Reader.Strict (Reader, runReader)
 import Control.Eff.Exception (runExc)
 import Control.Eff.Lift (Lift, runLift)
 import Control.Exception (SomeException)
 
 import Wf.Control.Eff.Logger (LogLevel(..), runLoggerStdIO)
 import Wf.Kvs.Redis (Kvs, runKvsRedis)
-import Wf.Web.Session (Session, sget, sput, renderSetCookie, SessionState, defaultSessionState, SessionKvs, getRequestSessionId, SessionSettings(..))
-import Wf.Control.Eff.Run.Session.Kvs (runSessionKvs)
+import Wf.Session.Kvs (Session, sget, sput, renderSetCookie, SessionKvs, SessionSettings(..), runSessionKvs)
 import Wf.Network.Http.Response (setStatus, addHeader, html, defaultResponse)
 import Wf.Network.Wai (toWaiResponse)
-import Wf.Application.Time (Time, getCurrentTime)
+import Wf.Application.Time (getCurrentTime)
 import Wf.Application.Exception (Exception)
 import Wf.Application.Logger (Logger, logDebug)
 
-import qualified Network.Wai as Wai (Request, Response, defaultRequest, requestHeaders, responseLBS, responseStatus, responseHeaders)
-import qualified Network.HTTP.Types as HTTP (status200, status500)
-import qualified Database.Redis as Redis (ConnectInfo(..), defaultConnectInfo, PortID(..))
+import qualified Network.Wai as Wai (Request, Response, requestHeaders)
+import qualified Network.HTTP.Types as HTTP (status500)
+import qualified Database.Redis as Redis (ConnectInfo(..), defaultConnectInfo)
 import qualified Network.Wai.Handler.Warp as Warp (run)
 
 import qualified Data.ByteString as B (ByteString)
@@ -54,36 +52,31 @@ app req = do
 
 
 main :: IO ()
-main = do
-    Warp.run 8080 server
+main = Warp.run 8080 server
     where
     errorResponse = toWaiResponse . setStatus HTTP.status500 $ defaultResponse ()
-    server request respond = do
-        let requestSessionId = getRequestSessionId sname . Wai.requestHeaders $ request
-        r <- run (app request) requestSessionId
-        case r of
-             Right res -> respond res
-             Left _ -> respond errorResponse
+    server request respond = either (const (respond errorResponse)) respond =<< run request app
 
 redisConnectInfo :: Redis.ConnectInfo
 redisConnectInfo = Redis.defaultConnectInfo { Redis.connectDatabase = 2 }
 
 run ::
-    Eff (  Session
-        :> Kvs SessionKvs
-        :> State SessionState
-        :> Exception
-        :> Logger
-        :> Lift IO
-        :> ()) Wai.Response ->
-    Maybe B.ByteString ->
+    Wai.Request ->
+    ( Wai.Request ->
+      Eff (  Session
+          :> Reader Wai.Request
+          :> Kvs SessionKvs
+          :> Exception
+          :> Logger
+          :> Lift IO
+          :> ()) Wai.Response) ->
     IO (Either SomeException Wai.Response)
-run eff requestSessionId = do
+run request a = do
     t <- getCurrentTime
     let ssettings = SessionSettings sname False 300 40
     runLift
         . runLoggerStdIO DEBUG
         . runExc
-        . evalState defaultSessionState
         . runKvsRedis redisConnectInfo
-        . runSessionKvs ssettings t requestSessionId $ eff
+        . flip runReader request
+        . runSessionKvs ssettings t $ a request

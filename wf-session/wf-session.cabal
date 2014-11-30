@@ -21,8 +21,9 @@ library
     Wf.Control.Eff.Run.Session,
     Wf.Control.Eff.Run.Session.Stm,
     Wf.Control.Eff.Run.Session.Kvs,
-    Wf.Web.Session,
-    Wf.Web.Session.Types
+    Wf.Session.Types,
+    Wf.Session.Stm,
+    Wf.Session.Kvs
   -- other-modules:
   other-extensions:    FlexibleContexts, DeriveDataTypeable, ExistentialQuantification, TypeOperators, OverloadedStrings, QuasiQuotes, TypeFamilies, TemplateHaskell, StandaloneDeriving
   build-depends:
@@ -30,7 +31,7 @@ library
     bytestring >=0.10 && <0.11,
     containers >=0.5 && <0.6,
     unordered-containers >=0.2 && <0.3,
-    stm,
+    stm >=2.1.1.0 && <2.5,
     extensible-effects >=1.4 && <1.8,
     http-types >=0.8 && <0.9,
     cookie >=0.4 && <0.5,
@@ -38,6 +39,7 @@ library
     blaze-builder >=0.3 && <0.4,
     th-printf >=0.3 && <0.4,
     binary >=0.7 && <0.8,
+    wai >=3.0.1 && <3.1,
     wf,
     wf-kvs
   hs-source-dirs:      src
@@ -57,6 +59,7 @@ test-suite spec
     binary >=0.7 && <0.8,
     cookie >=0.4 && <0.5,
     binary >=0.7 && <0.8,
+    wai >=3.0.1 && <3.1,
     wf,
     wf-kvs,
     wf-session,
