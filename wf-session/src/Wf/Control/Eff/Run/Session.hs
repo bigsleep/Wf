@@ -10,7 +10,6 @@ import Control.Eff.Reader.Strict (Reader, ask)
 import Wf.Control.Eff.Session (Session(..))
 import Control.Monad (when)
 
-import qualified Data.Binary as Bin (encode, decodeOrFail)
 import qualified Data.ByteString as B (ByteString, append)
 import qualified Data.ByteString.Char8 as B (pack)
 import qualified Data.List as L (lookup)
@@ -51,31 +50,26 @@ runSession handler sessionSettings current eff = do
 
     newSession = sessionHandlerNew handler sessionSettings current
 
-    loadSession requestSessionId = sessionHandlerLoad handler current requestSessionId
+    loadSession = sessionHandlerLoad handler current
 
     saveSession = sessionHandlerSave handler current
 
     sessionDestroy = sessionHandlerDestroy handler
 
-    handle s (SessionGet k c) = do
+    handle s (SessionGet decode k c) = do
         let m = HM.lookup k . sessionValue . sessionData $ s
-        loop s . c $ eitherToMaybe . Bin.decodeOrFail =<< m
+        loop s . c $ decode =<< m
 
-        where
-        eitherToMaybe = either (const Nothing) (\(_,_,a) -> Just a)
-
-    handle s (SessionPut k v c) = do
+    handle s (SessionPut encode k v c) = do
         s' <- if sessionId s == ""
                  then newSession
                  else return s
         loop (f s') c
 
         where
-        f ses @ (SessionState _ d @ (SessionData m _ _)  _) = ses { sessionData = d { sessionValue = HM.insert k encoded m } }
-        encoded = Bin.encode v
+        f ses @ (SessionState _ d @ (SessionData m _ _)  _) = ses { sessionData = d { sessionValue = HM.insert k (encode v) m } }
 
-    handle s (SessionTtl ttl' c) = do
-        loop (f s) c
+    handle s (SessionTtl ttl' c) = loop (f s) c
 
         where
         expire = T.addSeconds current ttl'
@@ -91,7 +85,7 @@ runSession handler sessionSettings current eff = do
     handle s (GetSessionId c) =
         loop s . c . sessionId $ s
 
-    handle s (RenderSetCookie c) = do
+    handle s (RenderSetCookie c) =
         loop s . c $ ("Set-Cookie", Blaze.toByteString . Cookie.renderSetCookie $ setCookie)
 
         where

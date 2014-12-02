@@ -11,32 +11,36 @@ module Wf.Control.Eff.Session
 
 import Control.Eff (Eff, Member, inj, send)
 import Data.Typeable (Typeable)
-import Data.Binary (Binary)
+import qualified Data.Binary as Bin (Binary, encode, decodeOrFail)
 import qualified Data.ByteString as B (ByteString)
+import qualified Data.ByteString.Lazy as L (ByteString)
 import qualified Network.HTTP.Types as HTTP (Header)
 
 data Session a =
-    forall b. (Binary b) => SessionGet B.ByteString (Maybe b -> a) |
-    forall b. (Binary b) => SessionPut B.ByteString b a |
+    forall b. SessionGet (L.ByteString -> Maybe b) B.ByteString (Maybe b -> a) |
+    forall b. SessionPut (b -> L.ByteString) B.ByteString b a |
     SessionTtl Integer a |
     SessionDestroy a |
     GetSessionId (B.ByteString -> a) |
     RenderSetCookie (HTTP.Header -> a)
-    deriving (Typeable)
+    deriving Typeable
 
 instance Functor Session where
-    fmap f (SessionGet k c) = SessionGet k (f . c)
-    fmap f (SessionPut k v c) = SessionPut k v (f c)
+    fmap f (SessionGet d k c) = SessionGet d k (f . c)
+    fmap f (SessionPut e k v c) = SessionPut e k v (f c)
     fmap f (SessionTtl ttl c) = SessionTtl ttl (f c)
     fmap f (SessionDestroy c) = SessionDestroy (f c)
     fmap f (GetSessionId c) = GetSessionId (f . c)
     fmap f (RenderSetCookie c) = RenderSetCookie (f . c)
 
-sget :: (Member Session r, Binary a) => B.ByteString -> Eff r (Maybe a)
-sget k = send $ inj . SessionGet k
 
-sput :: (Member Session r, Binary a) => B.ByteString -> a -> Eff r ()
-sput k v = send $ \f -> inj . SessionPut k v $ f ()
+sget :: (Member Session r, Bin.Binary a) => B.ByteString -> Eff r (Maybe a)
+sget k = send $ inj . SessionGet decode k
+    where
+    decode = either (const Nothing) (\(_,_,a) -> Just a) . Bin.decodeOrFail
+
+sput :: (Member Session r, Bin.Binary a) => B.ByteString -> a -> Eff r ()
+sput k v = send $ \f -> inj . SessionPut Bin.encode k v $ f ()
 
 sttl :: (Member Session r) => Integer -> Eff r ()
 sttl ttl = send $ \f -> inj . SessionTtl ttl $ f ()
