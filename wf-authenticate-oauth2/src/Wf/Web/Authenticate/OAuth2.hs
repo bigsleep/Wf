@@ -17,7 +17,7 @@ import qualified Control.Exception (Exception)
 import Control.Monad (unless)
 
 import qualified Data.ByteString as B (ByteString, append)
-import qualified Data.ByteString.Char8 as B (pack, unpack)
+import qualified Data.ByteString.Char8 as B (unpack)
 import qualified Data.ByteString.Lazy as L (ByteString)
 import qualified Data.Text.Encoding as T (encodeUtf8)
 import Data.Maybe (isJust)
@@ -29,11 +29,10 @@ import qualified Data.Aeson.TH as DA (deriveJSON, defaultOptions)
 import qualified Network.HTTP.Client as N (Request(..), RequestBody(..), Response(..), parseUrl, urlEncodedBody)
 import qualified Network.HTTP.Types as HTTP (methodGet, methodPost, renderQuery, status200, hAccept, hAuthorization)
 
-import System.Random (newStdGen, randomRs)
-
 import Wf.Network.Http.Response (Response, addHeader, redirect)
 import Wf.Application.Exception (Exception, throwException)
 import Wf.Application.Logger (Logger, logDebug)
+import Wf.Application.Random (randomByteString)
 
 data AccessTokenType = BEARER | MAC deriving (Show, Eq)
 
@@ -70,8 +69,7 @@ redirectToAuthorizationServer
        )
     => OAuth2 u -> Response body -> Eff r (Response body)
 redirectToAuthorizationServer oauth2 response = do
-    g <- lift newStdGen
-    let state = B.pack . take stateLen . map (chars !!) . randomRs (0, length chars - 1) $ g
+    state <- lift $ randomByteString 40
     Session.sput "state" state
     Session.sttl 300
     setCookie <- Session.renderSetCookie
@@ -83,10 +81,6 @@ redirectToAuthorizationServer oauth2 response = do
                  ]
         url = oauth2AuthorizationUri (oauth2Config oauth2) `B.append` HTTP.renderQuery True params
     return . redirect url . addHeader setCookie $ response
-    where
-    stateLen = 40
-    chars = ['0' .. '9'] ++ ['a' .. 'z'] ++ ['A' .. 'Z']
-
 
 getAccessToken
     :: (Member HttpClient r, Member Exception r, Member Session.Session r, Member Logger r)

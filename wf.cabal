@@ -29,9 +29,11 @@ library
     Wf.Network.Http.Request,
     Wf.Application.Time,
     Wf.Application.Logger,
-    Wf.Application.Exception
+    Wf.Application.Exception,
+    Wf.Application.Random
   build-depends:
     base >=4.7 && <4.8,
+    array >=0.1 && <0.6,
     bytestring >=0.10 && <0.11,
     text >=1.1 && <1.2,
     time >=1.4 && <1.5,
@@ -43,6 +45,7 @@ library
     http-client >=0.3 && <0.4,
     blaze-builder >=0.3 && <0.4,
     aeson >=0.6 && <0.7,
+    mwc-random >=0.12.0.0 && <0.14,
     reflection,
     wai >=3.0.1 && <3.1,
     binary >=0.7 && <0.8

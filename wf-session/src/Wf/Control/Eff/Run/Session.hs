@@ -19,10 +19,9 @@ import qualified Network.Wai as Wai (Request, requestHeaders)
 
 import qualified Web.Cookie as Cookie (parseCookies, renderSetCookie, def, setCookieName, setCookieValue, setCookieExpires, setCookieSecure)
 
-import System.Random (newStdGen, randomRs)
-
 import Wf.Session.Types (SessionState(..), SessionData(..), SessionSettings(..), SessionHandler(..), defaultSessionState)
 import qualified Wf.Application.Time as T (Time, formatTime, addSeconds)
+import Wf.Application.Random (randomByteString)
 
 runSession
     ::
@@ -101,13 +100,8 @@ runSession handler sessionSettings current eff = do
 getRequestSessionId :: B.ByteString -> Wai.Request -> Maybe B.ByteString
 getRequestSessionId name = (L.lookup name =<<) . fmap Cookie.parseCookies . L.lookup "Cookie" . Wai.requestHeaders
 
-genRandomByteString :: Int -> IO B.ByteString
-genRandomByteString len = return . B.pack . take len . map (chars !!) . randomRs (0, length chars - 1) =<< newStdGen
-    where
-    chars = ['0' .. '9'] ++ ['a' .. 'z'] ++ ['A' .. 'Z']
-
 genSessionId :: B.ByteString -> T.Time -> Int -> IO B.ByteString
 genSessionId sname t len = do
     let dateStr = B.pack $ T.formatTime ":%Y%m%d:" t
-    randomStr <- genRandomByteString len
+    randomStr <- randomByteString len
     return $ sname `B.append` dateStr `B.append` randomStr
