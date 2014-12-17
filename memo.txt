@@ -1,3 +1,34 @@
+---------------------------------------------------------------------------
+20141216 memo
+
+request -> m response
+から
+request -> (response -> m respond) -> m respond
+は作れる
+
+request -> (response -> m respond) -> m respond
+から
+request -> m response
+は作れなそう
+
+ルーティングの部分で普通のWai.Applicationも使える方がいいので
+色々変える必要があるかも
+
+Wai.Applicationを渡すroutesもほしい
+
+request -> M response と Wai.Application のルーターを作れば良さそう
+
+
+type Application = Request -> (Response -> IO Received) -> IO Received
+
+type App request response r =  request -> Eff r response
+
+toApplication
+    :: (SetMember Lift (Lift IO) r, FromWaiResponse response, ToWaiRequest request)
+    => (forall a. Eff r a -> IO a) -> App -> Application
+toApplication run app req cont = cont . toWaiResponse . run . app . lift . fromWaiRequest $ req
+
+
 ------------------------------------------------------------------------
 20141122 memo
 
