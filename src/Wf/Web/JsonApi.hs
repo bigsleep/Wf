@@ -21,13 +21,14 @@ import Data.Reflection (Given)
 import Data.Typeable (Typeable)
 
 import qualified Network.HTTP.Types as HTTP (status200, methodPost, methodGet, hContentType, hContentLength)
+import qualified Network.Wai as Wai (Response)
 
 import Wf.Network.Http.Types (Request(..), Response(..))
 import Wf.Web.Api (ApiDefinition(..), ApiInfo)
 import Wf.Web.Routing (RouteDefinition(..), RouteMethod(..), parseRoute)
 import Wf.Application.Exception (Exception, throwException)
 import Wf.Application.Logger (Logger, logDebug)
-import qualified Wf.Network.Wai as Wai (App(..))
+import Wf.Network.Wai (FromWaiRequest(..), ToWaiResponse(..))
 
 newtype JsonInput a = JsonInput { unJsonInput :: a } deriving (Show, Typeable, Eq)
 
@@ -53,20 +54,23 @@ instance Control.Exception.Exception JsonParseError
 
 jsonApi
     :: (DA.FromJSON i, DA.ToJSON o, Member Exception r, Member Logger r)
-    => String -> RouteDefinition -> (Given ApiInfo => i -> Eff r o) -> ApiDefinition (Eff r)
-jsonApi name route f =
+    => (Eff r Wai.Response -> IO Wai.Response)
+    -> String
+    -> RouteDefinition
+    -> (Given ApiInfo => i -> Eff r o)
+    -> ApiDefinition
+jsonApi run name route f =
     ApiDefinition
     { apiName = name
     , apiRouteDefinition = route
-    , apiImplement = Wai.App (api f)
-    , apiBefore = return ()
-    , apiAfter = return ()
+    , apiImplement = \request cont ->
+        cont =<< run . (return . toWaiResponse =<<) . app f =<< fromWaiRequest request
     }
 
     where
-    api :: (DA.FromJSON i, DA.ToJSON o, Member Exception r, Member Logger r, Given ApiInfo)
+    app :: (DA.FromJSON i, DA.ToJSON o, Member Exception r, Member Logger r, Given ApiInfo)
         => (Given ApiInfo => i -> Eff r o) -> Request L.ByteString -> Eff r (Response L.ByteString)
-    api g request = logDebug ("jsonApi request: " ++ show request) >> parse (requestBody request) >>= g >>= render
+    app g request = logDebug ("jsonApi request: " ++ show request) >> parse (requestBody request) >>= g >>= render
 
     parse :: (DA.FromJSON i, Member Exception r)
           => L.ByteString -> Eff r i
@@ -91,6 +95,9 @@ jsonApi name route f =
 
 jsonPostApi, jsonGetApi
     :: (DA.FromJSON i, DA.ToJSON o, Member Exception r, Member Logger r)
-    => String -> (Given ApiInfo => i -> Eff r o) -> ApiDefinition (Eff r)
-jsonPostApi route = jsonApi route RouteDefinition { routeDefinitionMethod = RouteMethodSpecific HTTP.methodPost, routeDefinitionPattern = parseRoute route }
-jsonGetApi route = jsonApi route RouteDefinition { routeDefinitionMethod = RouteMethodSpecific HTTP.methodGet, routeDefinitionPattern = parseRoute route }
+    => (Eff r Wai.Response -> IO Wai.Response)
+    -> String
+    -> (Given ApiInfo => i -> Eff r o)
+    -> ApiDefinition
+jsonPostApi run route = jsonApi run route RouteDefinition { routeDefinitionMethod = RouteMethodSpecific HTTP.methodPost, routeDefinitionPattern = parseRoute route }
+jsonGetApi run route = jsonApi run route RouteDefinition { routeDefinitionMethod = RouteMethodSpecific HTTP.methodGet, routeDefinitionPattern = parseRoute route }

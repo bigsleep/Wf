@@ -77,18 +77,17 @@ sessionHandlerStm ss = SessionHandler
 
 
 newSession
-    ::
-    ( Member Exception r
-    , Member Logger r
-    , SetMember Lift (Lift IO) r
-    )
+    :: ( Member Exception r
+       , Member Logger r
+       , SetMember Lift (Lift IO) r
+       )
     => SessionStore
     -> SessionSettings
     -> T.Time
     -> Eff r SessionState
 newSession sstore@(SessionStore tv) sessionSettings current = do
     sid <- lift $ genSessionId sname current (fromInteger len)
-    retryIfDuplicate =<< tryNewSession sid
+    retryIfDuplicate =<< tryNewSession sid lift
 
     where
     sname = sessionName sessionSettings
@@ -98,18 +97,25 @@ newSession sstore@(SessionStore tv) sessionSettings current = do
     end = T.addSeconds current ttl
     sd = defaultSessionData { sessionStartDate = current, sessionExpireDate = end }
 
-    tryNewSession sid = lift . atomically $ do
+    tryNewSession sid l = l . atomically $ do
         duplicate <- HM.member sid <$> readTVar tv
         if duplicate
             then return Nothing
             else return . Just $ SessionState sid sd isSecure
+
+    retryIfDuplicate
+        :: ( Member Exception r
+           , Member Logger r
+           , SetMember Lift (Lift IO) r
+           )
+        => Maybe SessionState
+        -> Eff r SessionState
 
     retryIfDuplicate Nothing = newSession sstore sessionSettings current
 
     retryIfDuplicate (Just ss) = do
         logInfo $ [s|new session. sessionId=%s|] (sessionId ss)
         return ss
-
 
 
 loadSession

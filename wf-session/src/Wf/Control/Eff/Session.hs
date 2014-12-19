@@ -35,21 +35,21 @@ instance Functor Session where
 
 
 sget :: (Member Session r, Bin.Binary a) => B.ByteString -> Eff r (Maybe a)
-sget k = send $ inj . SessionGet decode k
+sget k = send . inj . SessionGet decode k $ id
     where
     decode = either (const Nothing) (\(_,_,a) -> Just a) . Bin.decodeOrFail
 
 sput :: (Member Session r, Bin.Binary a) => B.ByteString -> a -> Eff r ()
-sput k v = send $ \f -> inj . SessionPut Bin.encode k v $ f ()
+sput k v = send . inj . SessionPut Bin.encode k v $ ()
 
 sttl :: (Member Session r) => Integer -> Eff r ()
-sttl ttl = send $ \f -> inj . SessionTtl ttl $ f ()
+sttl ttl = send . inj . SessionTtl ttl $ ()
 
 sdestroy :: (Member Session r) => Eff r ()
-sdestroy = send $ \f -> inj . SessionDestroy $ f ()
+sdestroy = send . inj . SessionDestroy $ ()
 
 getSessionId :: (Member Session r) => Eff r B.ByteString
-getSessionId = send $ inj . GetSessionId
+getSessionId = send . inj . GetSessionId $ id
 
 renderSetCookie :: (Member Session r) => Eff r HTTP.Header
-renderSetCookie = send $ inj . RenderSetCookie
+renderSetCookie = send . inj . RenderSetCookie $ id

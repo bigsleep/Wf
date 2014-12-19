@@ -3,7 +3,9 @@ module Wf.Web.Api
 ( apiRoutes
 , ApiDefinition(..)
 , ApiInfo(..)
-, getParameter
+, param
+, getWai
+, postWai
 , createApi
 , getApi
 , postApi
@@ -12,24 +14,19 @@ module Wf.Web.Api
 , postApiWith
 ) where
 
-import Control.Eff (SetMember, Eff, (:>))
-import Control.Eff.Lift (Lift, lift)
-
 import qualified Data.List as L (lookup)
 import qualified Data.ByteString as B (ByteString)
 import Data.Typeable (Typeable)
 import Data.Reflection (Given, give, given)
 import qualified Wf.Web.Routing as R (RouteDefinition(..), RouteMethod(..), Parameter, route, routes, parseRoute)
 import qualified Network.HTTP.Types as HTTP (Method, methodGet, methodPost)
-import qualified Wf.Network.Wai as Wai (App(..), FromWaiRequest(..), ToWaiResponse(..))
-import qualified Network.Wai as Wai (Request, Response, requestMethod, rawPathInfo)
+import Wf.Network.Wai (FromWaiRequest(..), ToWaiResponse(..))
+import qualified Network.Wai as Wai (Application, Response, requestMethod, rawPathInfo)
 
-data ApiDefinition m = ApiDefinition
+data ApiDefinition = ApiDefinition
     { apiName :: String
     , apiRouteDefinition :: R.RouteDefinition
-    , apiImplement :: (Given ApiInfo) => Wai.App m
-    , apiBefore :: m ()
-    , apiAfter :: m ()
+    , apiImplement :: (Given ApiInfo) => Wai.Application
     } deriving (Typeable)
 
 data ApiInfo = ApiInfo
@@ -39,75 +36,84 @@ data ApiInfo = ApiInfo
     } deriving (Typeable)
 
 apiRoutes
-    :: (Wai.ToWaiResponse response, SetMember Lift (Lift IO) r)
-    => Eff r response
-    -> [ApiDefinition (Eff r)]
-    -> Wai.Request
-    -> Eff r Wai.Response
+    :: (ToWaiResponse response)
+    => response
+    -> [ApiDefinition]
+    -> Wai.Application
 apiRoutes defaultApp apis request = R.routes def (map entry apis) method path
     where
     method = Wai.requestMethod request
     path = Wai.rawPathInfo request
-    def = fmap Wai.toWaiResponse defaultApp
+    def c = c $ toWaiResponse defaultApp
     entry api = R.route (apiRouteDefinition api) (exec api)
-    wrap (Wai.App a) req = do
-        x <- lift (Wai.fromWaiRequest req)
-        y <- a x
-        return (Wai.toWaiResponse y)
     exec api parameters = do
-        apiBefore api
         let apiInfo = ApiInfo { apiInfoApiName = apiName api
                               , apiInfoRouteDefinition = apiRouteDefinition api
                               , apiInfoParameters = parameters
                               }
-        r <- wrap (give apiInfo (apiImplement api)) $ request
-        apiAfter api
-        return r
+        give apiInfo (apiImplement api) request
 
-getParameter :: Given ApiInfo => B.ByteString -> Maybe B.ByteString
-getParameter name = L.lookup name $ apiInfoParameters given
+param :: Given ApiInfo => B.ByteString -> Maybe B.ByteString
+param name = L.lookup name $ apiInfoParameters given
 
-createApi :: (Monad m) => String -> R.RouteDefinition -> (Given ApiInfo => Wai.App m) -> ApiDefinition m
-createApi name route app =
+getWai, postWai
+    :: String
+    -> (Given ApiInfo => Wai.Application)
+    -> ApiDefinition
+getWai route = ApiDefinition route (rdget route)
+postWai route =  ApiDefinition route (rdpost route)
+
+createApi
+    :: (Monad m, FromWaiRequest request, ToWaiResponse response)
+    => (m Wai.Response -> IO Wai.Response)
+    -> String
+    -> R.RouteDefinition
+    ->(Given ApiInfo => request -> m response)
+    -> ApiDefinition
+createApi run name route app =
     ApiDefinition
     { apiName = name
     , apiRouteDefinition = route
-    , apiImplement = app
-    , apiBefore = return ()
-    , apiAfter = return ()
+    , apiImplement = \request cont ->
+        cont =<< run . (return . toWaiResponse =<<) . app =<< fromWaiRequest request
     }
 
-getApi, postApi :: (Monad m, Wai.FromWaiRequest request, Wai.ToWaiResponse response)
-    => String -> (Given ApiInfo => request -> m response) -> ApiDefinition m
-getApi route app = createApi route rd (Wai.App app)
-    where
-    rd = R.RouteDefinition { R.routeDefinitionMethod = R.RouteMethodSpecific HTTP.methodGet, R.routeDefinitionPattern = R.parseRoute route }
-postApi route app = createApi route rd (Wai.App app)
-    where
-    rd = R.RouteDefinition { R.routeDefinitionMethod = R.RouteMethodSpecific HTTP.methodPost, R.routeDefinitionPattern = R.parseRoute route }
+getApi, postApi
+    :: (Monad m, FromWaiRequest request, ToWaiResponse response)
+    => (m Wai.Response -> IO Wai.Response)
+    -> String
+    -> (Given ApiInfo => request -> m response)
+    -> ApiDefinition
+getApi run route = createApi run route (rdget route)
+postApi run route = createApi run route (rdpost route)
 
 createApiWith
-    :: (Monad m, Wai.FromWaiRequest request, Wai.ToWaiResponse response)
-    => String
+    :: (Monad m, FromWaiRequest request, ToWaiResponse response)
+    => (m Wai.Response -> IO Wai.Response)
+    -> String
     -> R.RouteDefinition
     -> (Given ApiInfo => request -> m input)
     -> (Given ApiInfo => input -> m output)
     -> (Given ApiInfo => output -> m response)
-    -> ApiDefinition m
-createApiWith name route parser implement renderer =
-    createApi name route $ Wai.App (\request -> parser request >>= implement >>= renderer)
+    -> ApiDefinition
+createApiWith run name route parser implement renderer =
+    createApi run name route $
+        \request -> parser request >>= implement >>= renderer
 
 getApiWith, postApiWith
-    :: (Monad m, Wai.FromWaiRequest request, Wai.ToWaiResponse response)
-    => String
+    :: (Monad m, FromWaiRequest request, ToWaiResponse response)
+    => (m Wai.Response -> IO Wai.Response)
+    -> String
     -> (Given ApiInfo => request -> m input)
     -> (Given ApiInfo => input -> m output)
     -> (Given ApiInfo => output -> m response)
-    -> ApiDefinition m
-getApiWith route = createApiWith route rd
-    where
-    rd = R.RouteDefinition { R.routeDefinitionMethod = R.RouteMethodSpecific HTTP.methodGet, R.routeDefinitionPattern = R.parseRoute route }
-postApiWith route = createApiWith route rd
-    where
-    rd = R.RouteDefinition { R.routeDefinitionMethod = R.RouteMethodSpecific HTTP.methodPost, R.routeDefinitionPattern = R.parseRoute route }
+    -> ApiDefinition
+getApiWith run route = createApiWith run route (rdget route)
+postApiWith run route = createApiWith run route (rdpost route)
 
+rd :: HTTP.Method -> String -> R.RouteDefinition
+rd method route = R.RouteDefinition (R.RouteMethodSpecific method) (R.parseRoute route)
+
+rdget, rdpost :: String -> R.RouteDefinition
+rdget = rd HTTP.methodGet
+rdpost = rd HTTP.methodPost

@@ -38,23 +38,23 @@ instance Functor (Kvs kvs) where
 
 
 get :: (Typeable kvs, Bin.Binary v, Member (Kvs kvs) r) => kvs -> KeyType kvs -> Eff r (Maybe v)
-get kvs k = send $ inj . Get kvs k
+get kvs k = send . inj . Get kvs k $ id
 
 set :: (Typeable kvs, Bin.Binary v, Member (Kvs kvs) r) => kvs -> KeyType kvs -> v -> Eff r ()
-set kvs k v = send $ \f -> inj . Set kvs k v $ f ()
+set kvs k v = send . inj . Set kvs k v $ ()
 
 setWithTtl :: (Typeable kvs, Bin.Binary v, Member (Kvs kvs) r) => kvs -> KeyType kvs -> v -> Integer -> Eff r ()
-setWithTtl kvs k v t = send $ \f -> inj . SetWithTtl kvs k v t $ f ()
+setWithTtl kvs k v t = send . inj . SetWithTtl kvs k v t $ ()
 
 delete :: (Typeable kvs, Member (Kvs kvs) r) => kvs -> KeyType kvs -> Eff r Bool
-delete kvs k = send $ inj . Delete kvs k
+delete kvs k = send . inj . Delete kvs k $ id
 
 exists :: (Typeable kvs, Member (Kvs kvs) r) => kvs -> KeyType kvs -> Eff r Bool
-exists kvs k = send $ inj . Exists kvs k
+exists kvs k = send . inj . Exists kvs k $ id
 
 ttl :: (Typeable kvs, Member (Kvs kvs) r) => kvs -> KeyType kvs -> Eff r (Maybe Integer)
-ttl kvs k = send $ inj . Ttl kvs k
+ttl kvs k = send . inj . Ttl kvs k $ id
 
 keys :: (Typeable kvs, Member (Kvs kvs) r) => kvs -> Eff r [KeyType kvs]
-keys kvs = send $ inj . Keys kvs
+keys kvs = send . inj . Keys kvs $ id
 

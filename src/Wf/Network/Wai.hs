@@ -2,7 +2,6 @@
 module Wf.Network.Wai
 ( FromWaiRequest(..)
 , ToWaiResponse(..)
-, App(..)
 , toWaiApplication
 ) where
 
@@ -15,9 +14,6 @@ toWaiApplication
     :: (FromWaiRequest request, ToWaiResponse response)
     => (request -> IO response) -> Wai.Application
 toWaiApplication app w respond = fromWaiRequest w >>= app >>= respond . toWaiResponse
-
-data App m = forall request response. (FromWaiRequest request, ToWaiResponse response)
-    => App (request -> m response)
 
 class FromWaiRequest a where
     fromWaiRequest :: Wai.Request -> IO a

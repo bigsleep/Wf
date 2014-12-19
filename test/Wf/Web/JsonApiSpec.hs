@@ -10,7 +10,7 @@ import Control.Monad (sequence_)
 import Control.Exception (SomeException(..))
 
 import qualified Network.HTTP.Types as HTTP (Method, status200, status400, status404, methodGet, methodPost, hContentType, hContentLength)
-import qualified Network.Wai as Wai (Request, Response, requestMethod)
+import qualified Network.Wai as Wai (Application, Request, Response, requestMethod)
 import qualified Network.Wai.Test as WT
 
 import qualified Data.ByteString as B (ByteString)
@@ -59,10 +59,6 @@ jsonApiSpec = describe "json api" . it "create json api" $ do
     execCase HTTP.methodGet "/xxx" () (shouldError 404)
 
     where
-    testApp request respond = (respond =<<) . (handleResult =<<) . runLift . runLoggerStdIO DEBUG . runExc . routes $ request
-    handleResult (Right r) = return r
-    handleResult (Left _) = return . toWaiResponse . setStatus HTTP.status400 . defaultResponse $ ()
-
     execCase :: (DA.ToJSON a) => HTTP.Method -> B.ByteString -> a -> (WT.SRequest -> WT.Session ()) -> IO ()
     execCase method path a s =
         WT.runSession (s sreq) testApp
@@ -86,12 +82,17 @@ jsonApiSpec = describe "json api" . it "create json api" $ do
 
 type M = Eff (Exception :> Logger :> Lift IO :> ())
 
-routes :: Wai.Request -> M Wai.Response
-routes = apiRoutes (return notFoundApp)
-    [ jsonGetApi "/" (return . rootApp)
-    , jsonGetApi "/add" (return . addApp)
-    , jsonPostApi "/dic" (return . dicApp)
+testApp :: Wai.Application
+testApp = apiRoutes notFoundApp
+    [ jsonGetApi run "/" (return . rootApp)
+    , jsonGetApi run "/add" (return . addApp)
+    , jsonPostApi run "/dic" (return . dicApp)
     ]
+    where
+    run :: M Wai.Response -> IO Wai.Response
+    run = (handleResult =<<) . runLift . runLoggerStdIO DEBUG . runExc
+    handleResult (Right r) = return r
+    handleResult (Left _) = return . toWaiResponse . setStatus HTTP.status400 . defaultResponse $ ()
 
 notFoundApp :: Response L.ByteString
 notFoundApp = setBody "<h1>Not Found</h1>" . setStatus HTTP.status404 $ defaultResponse ()

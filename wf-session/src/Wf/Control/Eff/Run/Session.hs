@@ -1,11 +1,11 @@
-{-# LANGUAGE TypeOperators, OverloadedStrings, FlexibleContexts #-}
+{-# LANGUAGE TypeOperators, OverloadedStrings, FlexibleContexts, ScopedTypeVariables #-}
 module Wf.Control.Eff.Run.Session
 ( runSession
 , getRequestSessionId
 , genSessionId
 ) where
 
-import Control.Eff (Eff, VE(..), (:>), Member, admin, handleRelay)
+import Control.Eff (Eff, (:>), Member, freeMap, handleRelay)
 import Control.Eff.Reader.Strict (Reader, ask)
 import Wf.Control.Eff.Session (Session(..))
 import Control.Monad (when)
@@ -24,8 +24,7 @@ import qualified Wf.Application.Time as T (Time, formatTime, addSeconds)
 import Wf.Application.Random (randomByteString)
 
 runSession
-    ::
-    Member (Reader Wai.Request) r
+    :: Member (Reader Wai.Request) r
     => SessionHandler (Eff r)
     -> SessionSettings
     -> T.Time
@@ -34,7 +33,7 @@ runSession
 runSession handler sessionSettings current eff = do
     requestSessionId <- fmap (getRequestSessionId sname) ask
     s <- loadSession requestSessionId
-    (r, s') <- loop s . admin $ eff
+    (r, s') <- loop s eff
     saveSession s'
     return r
 
@@ -43,9 +42,8 @@ runSession handler sessionSettings current eff = do
 
     isSecure = sessionIsSecure sessionSettings
 
-    loop s (Val a) = return (a, s)
-
-    loop s (E u) = handleRelay u (loop s) (handle s)
+    loop s = freeMap (\a -> return (a, s)) $
+        \u -> handleRelay u (loop s) (handle s)
 
     newSession = sessionHandlerNew handler sessionSettings current
 

@@ -3,7 +3,7 @@ module Wf.Control.Eff.Run.Kvs.RedisSpec
 ( kvsRedisSpec
 ) where
 
-import Control.Eff (Eff, VE(..), (:>), Member, SetMember, admin, handleRelay)
+import Control.Eff (Eff, (:>), Member, SetMember, handleRelay)
 import Control.Eff.Lift (Lift, runLift)
 import Wf.Control.Eff.Logger (LogLevel(..), runLoggerStdIO)
 import Control.Eff.Exception (runExc)

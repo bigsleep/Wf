@@ -5,7 +5,8 @@ module Wf.Control.Eff.HttpClient
 , runHttpClient
 , runHttpClientMock
 ) where
-import Control.Eff ((:>), VE(..), Eff, Member, SetMember, admin, handleRelay, inj, send)
+
+import Control.Eff ((:>), Eff, Member, SetMember, handleRelay, inj, send, freeMap)
 import Control.Eff.Lift (Lift, lift)
 import Data.Typeable (Typeable)
 import qualified Data.ByteString.Lazy as L (ByteString)
@@ -14,15 +15,19 @@ import qualified Network.HTTP.Client as N (Request(..), Response(..), Manager, h
 data HttpClient a = HttpClient N.Request (N.Response L.ByteString -> a) deriving (Typeable, Functor)
 
 httpClient :: (Member HttpClient r) => N.Request -> Eff r (N.Response L.ByteString)
-httpClient req = send $ inj . HttpClient req
+httpClient req = send . inj $ HttpClient req id
 
 runHttpClient :: (SetMember Lift (Lift IO) r) => N.Manager -> Eff (HttpClient :> r) a -> Eff r a
-runHttpClient m eff = loop . admin $ eff
-    where loop (Val a) = return a
-          loop (E u) = handleRelay u loop $
-                            \(HttpClient req f) -> lift (N.httpLbs req m) >>= loop . f
+runHttpClient manager = loop
+    where
+    loop :: (SetMember Lift (Lift IO) r) => Eff (HttpClient :> r) a -> Eff r a
+    loop = freeMap return $
+        \u -> handleRelay u loop $
+            \(HttpClient req f) -> lift (N.httpLbs req manager) >>= loop . f
+
 
 runHttpClientMock :: (N.Request -> N.Response L.ByteString) -> Eff (HttpClient :> r) a -> Eff r a
-runHttpClientMock server = loop . admin
-    where loop (Val a) = return a
-          loop (E u) = handleRelay u loop $ \(HttpClient req f) -> loop . f $ server req
+runHttpClientMock server = loop
+    where
+        loop = freeMap return $
+            \u -> handleRelay u loop $ \(HttpClient req f) -> loop . f $ server req

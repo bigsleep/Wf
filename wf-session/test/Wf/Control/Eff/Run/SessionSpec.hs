@@ -3,7 +3,7 @@ module Wf.Control.Eff.Run.SessionSpec
 ( sessionSpec
 ) where
 
-import Control.Eff (Eff, VE(..), (:>), Member, SetMember, admin, handleRelay)
+import Control.Eff (Eff, (:>), Member, SetMember, handleRelay)
 import qualified Wf.Control.Eff.Kvs as Kvs (Kvs(..), get)
 import Control.Eff.Lift (Lift, runLift)
 import Control.Eff.Exception (Exc, runExc, throwExc)

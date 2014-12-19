@@ -21,8 +21,8 @@ data Authenticate auth a =
 
 authenticate :: (Typeable auth, Member (Authenticate auth) r)
              => auth -> AuthenticationKeyType auth -> Eff r (AuthenticationUserType auth)
-authenticate auth key = send $ inj . Authenticate auth key
+authenticate auth key = send . inj . Authenticate auth key $ id
 
 authenticationTransfer :: (Typeable auth, Member (Authenticate auth) r)
              => auth -> Response () -> Eff r (Response ())
-authenticationTransfer auth response = send $ inj . AuthenticationTransfer auth response
+authenticationTransfer auth response = send . inj . AuthenticationTransfer auth response $ id

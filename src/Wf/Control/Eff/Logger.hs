@@ -12,7 +12,7 @@ module Wf.Control.Eff.Logger
 , LogOutputType
 ) where
 
-import Control.Eff ((:>), VE(..), Eff, Member, SetMember, admin, handleRelay, inj, send)
+import Control.Eff ((:>), Eff, Member, SetMember, handleRelay, inj, send, freeMap)
 import Control.Eff.Lift (Lift, lift)
 import Control.Monad (when)
 import Data.Typeable (Typeable)
@@ -25,7 +25,7 @@ type family LogOutputType logger :: *
 data Logger logger a = Logger logger LogLevel (LogOutputType logger) a deriving (Typeable, Functor)
 
 log :: (Typeable logger, Member (Logger logger) r) => logger -> LogLevel -> LogOutputType logger -> Eff r ()
-log logger lv s = send $ \f -> inj $ Logger logger lv s $ f ()
+log logger lv s = send . inj $ Logger logger lv s ()
 
 logDebug, logNotice, logInfo, logWarn, logError :: (Typeable logger, Member (Logger logger) r) => logger -> LogOutputType logger -> Eff r ()
 logDebug = flip log DEBUG
@@ -36,8 +36,9 @@ logError = flip log ERROR
 
 runLoggerStdIO :: (Show (LogOutputType logger), Typeable logger, Member (Lift IO) r, SetMember Lift (Lift IO) r)
                => LogLevel -> Eff (Logger logger :> r) a -> Eff r a
-runLoggerStdIO minL = loop minL . admin
-    where loop _ (Val a) = return a
-          loop mlv (E u) = handleRelay u (loop mlv) $
-                            \(Logger _ lv s f) -> when (lv >= mlv) (lift $ p lv s) >> loop mlv f
-          p lv s = putStrLn $ "[" ++ show lv ++ "] " ++ show s
+runLoggerStdIO minL = loop
+    where
+    loop = freeMap return $
+        \u -> handleRelay u loop $
+            \(Logger _ lv s f) -> when (lv >= minL) (lift $ p lv s) >> loop f
+    p lv s = putStrLn $ "[" ++ show lv ++ "] " ++ show s
