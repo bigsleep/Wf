@@ -36,22 +36,20 @@ data ApiInfo = ApiInfo
     } deriving (Typeable)
 
 apiRoutes
-    :: (ToWaiResponse response)
-    => response
+    :: Wai.Application
     -> [ApiDefinition]
     -> Wai.Application
-apiRoutes defaultApp apis request = R.routes def (map entry apis) method path
+apiRoutes defaultApp apis request = R.routes defaultApp (map entry apis) method path request
     where
     method = Wai.requestMethod request
     path = Wai.rawPathInfo request
-    def c = c $ toWaiResponse defaultApp
     entry api = R.route (apiRouteDefinition api) (exec api)
     exec api parameters = do
         let apiInfo = ApiInfo { apiInfoApiName = apiName api
                               , apiInfoRouteDefinition = apiRouteDefinition api
                               , apiInfoParameters = parameters
                               }
-        give apiInfo (apiImplement api) request
+        give apiInfo (apiImplement api)
 
 param :: Given ApiInfo => B.ByteString -> Maybe B.ByteString
 param name = L.lookup name $ apiInfoParameters given

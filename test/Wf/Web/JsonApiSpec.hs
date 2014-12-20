@@ -83,7 +83,7 @@ jsonApiSpec = describe "json api" . it "create json api" $ do
 type M = Eff (Exception :> Logger :> Lift IO :> ())
 
 testApp :: Wai.Application
-testApp = apiRoutes notFoundApp
+testApp = apiRoutes defaultApp
     [ jsonGetApi run "/" (return . rootApp)
     , jsonGetApi run "/add" (return . addApp)
     , jsonPostApi run "/dic" (return . dicApp)
@@ -91,6 +91,7 @@ testApp = apiRoutes notFoundApp
     where
     run :: M Wai.Response -> IO Wai.Response
     run = (handleResult =<<) . runLift . runLoggerStdIO DEBUG . runExc
+    defaultApp _ cont = cont . toWaiResponse $ notFoundApp
     handleResult (Right r) = return r
     handleResult (Left _) = return . toWaiResponse . setStatus HTTP.status400 . defaultResponse $ ()
 

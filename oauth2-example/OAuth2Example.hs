@@ -17,7 +17,7 @@ import qualified Data.Aeson as DA (Value(..), FromJSON(..), decode, encode, (.:)
 import qualified Data.Aeson.TH as DA (deriveJSON, defaultOptions)
 import GHC.Generics (Generic)
 
-import qualified Network.Wai as Wai (Request, Response)
+import qualified Network.Wai as Wai (Application, Request, Response)
 import qualified Network.HTTP.Client as N (Manager, newManager)
 import qualified Network.HTTP.Client.TLS as N (tlsManagerSettings)
 import qualified Network.HTTP.Types as HTTP (status500)
@@ -70,9 +70,9 @@ main = do
         port = settingsPort settings
         uri = settingsUri settings
         sessionSettings = settingsSession settings
-        server = toWaiApplication $ run oauth2 manager sessionStore sessionSettings (routes uri)
+        run = runApp oauth2 manager sessionStore sessionSettings
 
-    Warp.run port server
+    Warp.run port (routes run uri)
 
     where
     loadSettings :: IO Settings
@@ -93,13 +93,16 @@ type M = Eff
     :> Lift IO
     :> ())
 
-routes :: B.ByteString -> Wai.Request -> M Wai.Response
-routes uri = apiRoutes rootApp rs
+routes :: (Wai.Request -> M Wai.Response -> IO Wai.Response) -> B.ByteString -> Wai.Application
+routes run uri request =
+    apiRoutes defaultApp rs request
     where
-    rs = [ getApi "/" (const rootApp :: Wai.Request -> M Wai.Response)
-         , postApi "/login" loginApp
-         , getApi "/oauth2callback" (oauth2CallbackApp uri)
+    run' = run request
+    rs = [ getApi run' "/" (const rootApp :: Wai.Request -> M Wai.Response)
+         , postApi run' "/login" loginApp
+         , getApi run' "/oauth2callback" (oauth2CallbackApp uri)
          ]
+    defaultApp _ c = c =<< run' rootApp
 
 instance AuthenticationType () where
     type AuthenticationKeyType () = ()
@@ -129,19 +132,19 @@ oauth2CallbackApp uri req = do
     return . toWaiResponse . redirect uri . addHeader setCookie $ defaultResponse ()
 
 
-run :: OAuth2 User
+runApp :: OAuth2 User
     -> N.Manager
     -> SessionStore
     -> SessionSettings
-    -> (Wai.Request -> M Wai.Response)
     -> Wai.Request
+    -> M Wai.Response
     -> IO Wai.Response
-run oauth2 manager sessionStore sessionSettings app request = do
+runApp oauth2 manager sessionStore sessionSettings request a = do
     t <- getCurrentTime
-    run' t request
+    runApp' t a
 
     where
-    run' t =
+    runApp' t =
           runLift
         . (>>= handleError)
         . runExc
@@ -150,7 +153,6 @@ run oauth2 manager sessionStore sessionSettings app request = do
         . runSessionStm sessionStore sessionSettings t
         . runHttpClient manager
         . runAuthenticateOAuth2 oauth2
-        . app
     internalError = toWaiResponse . setStatus HTTP.status500 . file "oauth2-example/static/error.html" $ defaultResponse ()
     handleError (Left (SomeException e)) = do
         lift $ print e

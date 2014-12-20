@@ -1,3 +1,20 @@
+-----------------------------------------------------------------------------
+20141220 extensible-effects
+
+reflection without remorseのFreeモナドを使った実装になった。
+
+VE, adminなどがなくなった。
+freeMapを使う。
+
+Liftを使った時にwhereに制約付きの型を書かないといけなくなっていてだるい。
+MemberUのインスタンスが解決できないと言われる
+
+aaa :: (SetMember Lift (Lift IO) r) => Eff r String
+aaa = bbb
+    where
+    bbb :: (SetMember Lift (Lift IO) r) => Eff r String
+    bbb = lift getLine
+
 ---------------------------------------------------------------------------
 20141216 memo
 

@@ -3,7 +3,7 @@ module Wf.Control.Eff.Run.Authenticate.OAuth2
 ( runAuthenticateOAuth2
 ) where
 
-import Control.Eff (Eff, VE(..), (:>), Member, SetMember, admin, handleRelay)
+import Control.Eff (Eff, (:>), Member, SetMember, freeMap, handleRelay)
 import Control.Eff.Lift (Lift)
 import Control.Eff.Reader.Strict (Reader)
 import Wf.Control.Eff.Authenticate (Authenticate(..), AuthenticationType(..))
@@ -28,11 +28,9 @@ runAuthenticateOAuth2
        , AuthenticationUserType auth ~ u
        )
     => OAuth2 u -> Eff (Authenticate auth :> r) a -> Eff r a
-runAuthenticateOAuth2 oauth2 = loop . admin
+runAuthenticateOAuth2 oauth2 = loop
     where
-    loop (Val a) = return a
-
-    loop (E u) = handleRelay u loop handle
+    loop = freeMap return $ \u -> handleRelay u loop handle
 
     handle (Authenticate _ _ c) = do
         maybeCode <- queryParam "code"

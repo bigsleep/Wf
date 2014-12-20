@@ -3,7 +3,7 @@ module Wf.Web.Authenticate.OAuth2Spec
 ( oauth2Spec
 ) where
 
-import Control.Eff (Eff, VE(..), (:>), Member, SetMember, admin, handleRelay)
+import Control.Eff (Eff, (:>), Member, SetMember, handleRelay)
 import Wf.Control.Eff.HttpClient (HttpClient(..), httpClient, runHttpClientMock)
 import Wf.Control.Eff.Session (Session(..), sget, sput, sttl, sdestroy, getSessionId)
 import qualified Wf.Control.Eff.Kvs as Kvs (Kvs(..), get)
