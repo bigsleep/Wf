@@ -3,7 +3,7 @@ module Wf.Web.Api
 ( apiRoutes
 , ApiDefinition(..)
 , ApiInfo(..)
-, param
+, urlParam
 , getWai
 , postWai
 , createApi
@@ -51,8 +51,8 @@ apiRoutes defaultApp apis request = R.routes defaultApp (map entry apis) method 
                               }
         give apiInfo (apiImplement api)
 
-param :: Given ApiInfo => B.ByteString -> Maybe B.ByteString
-param name = L.lookup name $ apiInfoParameters given
+urlParam :: Given ApiInfo => B.ByteString -> Maybe B.ByteString
+urlParam name = L.lookup name $ apiInfoParameters given
 
 getWai, postWai
     :: String
