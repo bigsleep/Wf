@@ -9,6 +9,8 @@ module Wf.Network.Http.Response
 , defaultResponse
 , setContentType
 , setContentLength
+, setCookie
+, setCookie'
 , text
 , html
 , json
@@ -18,8 +20,11 @@ module Wf.Network.Http.Response
 import qualified Data.ByteString as B (ByteString)
 import qualified Data.ByteString.Char8 as B (pack)
 import qualified Data.ByteString.Lazy as L (ByteString, length)
+import qualified Blaze.ByteString.Builder as Blaze (toByteString)
 import qualified Network.HTTP.Types as HTTP (status302, hContentType, hContentLength)
-import Wf.Network.Http.Types (Response(..), ResponseStatus, ResponseHeader, defaultResponse)
+import Wf.Application.Time (Time)
+import Wf.Network.Http.Types (Response(..), ResponseStatus, ResponseHeader, ResponseFilePath(..), defaultResponse)
+import qualified Web.Cookie as Cookie (SetCookie, renderSetCookie, def, setCookieName, setCookieValue, setCookieExpires, setCookieSecure, setCookieHttpOnly, setCookieDomain, setCookiePath)
 
 setStatus :: ResponseStatus -> Response body -> Response body
 setStatus s res = res { responseStatus = s }
@@ -45,6 +50,23 @@ setContentType ctype = addHeader (HTTP.hContentType, ctype)
 setContentLength :: Integer -> Response a -> Response a
 setContentLength l = addHeader (HTTP.hContentLength, B.pack . show $ l)
 
+setCookie :: B.ByteString -> B.ByteString -> Maybe Time -> Maybe B.ByteString -> Maybe B.ByteString -> Bool -> Bool -> Response a -> Response a
+setCookie name value expires domain path secure httpOnly =
+    addHeader ("Set-Cookie", Blaze.toByteString . Cookie.renderSetCookie $ sc)
+    where
+    sc = Cookie.def
+        { Cookie.setCookieName = name
+        , Cookie.setCookieValue = value
+        , Cookie.setCookieExpires = expires
+        , Cookie.setCookieSecure = secure
+        , Cookie.setCookieHttpOnly = httpOnly
+        , Cookie.setCookieDomain = domain
+        , Cookie.setCookiePath = path
+        }
+
+setCookie' :: Cookie.SetCookie -> Response a -> Response a
+setCookie' sc = addHeader ("Set-Cookie", Blaze.toByteString . Cookie.renderSetCookie $ sc)
+
 text :: L.ByteString -> Response a -> Response L.ByteString
 text b = setContentType "text/plain" . setContentLength (fromIntegral . L.length $ b) . setBody b
 
@@ -54,5 +76,5 @@ html b = setContentType "text/html" . setContentLength (fromIntegral . L.length 
 json :: L.ByteString -> Response a -> Response L.ByteString
 json b = setContentType "application/json" . setContentLength (fromIntegral . L.length $ b) . setBody b
 
-file :: FilePath -> Response a -> Response FilePath
-file path = setBody path
+file :: FilePath -> Response a -> Response ResponseFilePath
+file = setBody . ResponseFilePath

@@ -1,8 +1,9 @@
-{-# LANGUAGE OverloadedStrings, DeriveDataTypeable, DeriveGeneric, TypeFamilies, TemplateHaskell, StandaloneDeriving, ExistentialQuantification #-}
+{-# LANGUAGE OverloadedStrings, DeriveDataTypeable, DeriveGeneric, TypeFamilies #-}
 module Wf.Session.Types
 ( SessionState(..)
 , SessionData(..)
 , SessionSettings(..)
+, SetCookieSettings(..)
 , SessionKvs(..)
 , SessionError(..)
 , SessionHandler(..)
@@ -38,12 +39,22 @@ data SessionData = SessionData
 
 data SessionSettings = SessionSettings
     { sessionName :: B.ByteString
-    , sessionIsSecure :: Bool
     , sessionTtl :: Integer
     , sessionIdLength :: Integer
+    , sessionSetCookieSettings :: SetCookieSettings
+    } deriving (Show, Typeable, Generic)
+
+data SetCookieSettings = SetCookieSettings
+    { addSecureIfHttps :: Bool
+    , addExpires :: Bool
+    , isHttpOnly :: Bool
+    , cookiePath :: Maybe B.ByteString
+    , cookieDomain :: Maybe B.ByteString
     } deriving (Show, Typeable, Generic)
 
 instance Binary SessionState
+
+instance Binary SetCookieSettings
 
 instance Binary SessionSettings
 
@@ -58,7 +69,10 @@ defaultSessionData :: SessionData
 defaultSessionData = SessionData HM.empty T.mjd T.mjd
 
 defaultSessionSettings :: SessionSettings
-defaultSessionSettings = SessionSettings "SID" False 3600 40
+defaultSessionSettings = SessionSettings "SID" 3600 40 defaultSetCookieSettings
+
+defaultSetCookieSettings :: SetCookieSettings
+defaultSetCookieSettings = SetCookieSettings True False True Nothing Nothing
 
 data SessionKvs = SessionKvs deriving (Typeable)
 

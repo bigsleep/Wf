@@ -8,7 +8,7 @@ module Wf.Network.Wai
 import qualified Data.ByteString.Lazy as L (ByteString, empty)
 import qualified Data.Text.Encoding as T (encodeUtf8)
 import qualified Network.Wai as Wai (Application, Request, httpVersion, requestMethod, requestHeaders, pathInfo, rawPathInfo, queryString, rawQueryString, isSecure, remoteHost, strictRequestBody, Response, responseLBS, responseFile)
-import Wf.Network.Http.Types (Request(..), Response(..))
+import Wf.Network.Http.Types (Request(..), Response(..), ResponseFilePath(..))
 
 toWaiApplication
     :: (FromWaiRequest request, ToWaiResponse response)
@@ -64,5 +64,5 @@ instance ToWaiResponse (Response L.ByteString) where
 instance ToWaiResponse (Response ()) where
     toWaiResponse res = Wai.responseLBS (responseStatus res) (responseHeaders res) L.empty
 
-instance ToWaiResponse (Response FilePath) where
-    toWaiResponse res = Wai.responseFile (responseStatus res) (responseHeaders res) (responseBody res) Nothing
+instance ToWaiResponse (Response ResponseFilePath) where
+    toWaiResponse res = Wai.responseFile (responseStatus res) (responseHeaders res) (unResponseFilePath $ responseBody res) Nothing

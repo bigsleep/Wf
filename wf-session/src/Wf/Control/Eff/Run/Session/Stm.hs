@@ -93,7 +93,6 @@ newSession sstore@(SessionStore tv) sessionSettings current = do
     sname = sessionName sessionSettings
     len = sessionIdLength sessionSettings
     ttl = sessionTtl sessionSettings
-    isSecure = sessionIsSecure sessionSettings
     end = T.addSeconds current ttl
     sd = defaultSessionData { sessionStartDate = current, sessionExpireDate = end }
 
@@ -101,7 +100,7 @@ newSession sstore@(SessionStore tv) sessionSettings current = do
         duplicate <- HM.member sid <$> readTVar tv
         if duplicate
             then return Nothing
-            else return . Just $ SessionState sid sd isSecure
+            else return . Just $ SessionState sid sd True
 
     retryIfDuplicate
         :: ( Member Exception r

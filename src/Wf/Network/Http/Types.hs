@@ -8,6 +8,7 @@ module Wf.Network.Http.Types
 , Response(..)
 , ResponseStatus
 , ResponseHeader
+, ResponseFilePath(..)
 , defaultRequest
 , defaultResponse
 ) where
@@ -44,6 +45,8 @@ data Request body = Request
 type ResponseStatus = HTTP.Status
 
 type ResponseHeader = HTTP.Header
+
+newtype ResponseFilePath = ResponseFilePath { unResponseFilePath :: FilePath }
 
 data Response body = Response
     { responseStatus :: ResponseStatus

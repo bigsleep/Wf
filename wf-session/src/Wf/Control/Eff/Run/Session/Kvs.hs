@@ -78,12 +78,11 @@ newSession sessionSettings current = do
              let sd = defaultSessionData { sessionStartDate = start, sessionExpireDate = end }
              logInfo $ [s|new session. sessionId=%s|] sid
              Kvs.setWithTtl SessionKvs sid sd ttl
-             return $ SessionState sid sd isSecure
+             return $ SessionState sid sd True
     where
     sname = sessionName sessionSettings
     len = sessionIdLength sessionSettings
     ttl = sessionTtl sessionSettings
-    isSecure = sessionIsSecure sessionSettings
 
 
 

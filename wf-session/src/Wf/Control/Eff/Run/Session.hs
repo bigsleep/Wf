@@ -15,11 +15,11 @@ import qualified Data.ByteString.Char8 as B (pack)
 import qualified Data.List as L (lookup)
 import qualified Data.HashMap.Strict as HM (lookup, insert)
 import qualified Blaze.ByteString.Builder as Blaze (toByteString)
-import qualified Network.Wai as Wai (Request, requestHeaders)
+import qualified Network.Wai as Wai (Request, requestHeaders, isSecure)
 
-import qualified Web.Cookie as Cookie (parseCookies, renderSetCookie, def, setCookieName, setCookieValue, setCookieExpires, setCookieSecure)
+import qualified Web.Cookie as Cookie (parseCookies, renderSetCookie, def, setCookieName, setCookieValue, setCookieExpires, setCookieSecure, setCookieHttpOnly, setCookieDomain, setCookiePath)
 
-import Wf.Session.Types (SessionState(..), SessionData(..), SessionSettings(..), SessionHandler(..), defaultSessionState)
+import Wf.Session.Types (SessionState(..), SessionData(..), SessionSettings(..), SetCookieSettings(..), SessionHandler(..), defaultSessionState)
 import qualified Wf.Application.Time as T (Time, formatTime, addSeconds)
 import Wf.Application.Random (randomByteString)
 
@@ -40,7 +40,7 @@ runSession handler sessionSettings current eff = do
     where
     sname = sessionName sessionSettings
 
-    isSecure = sessionIsSecure sessionSettings
+    scSettings = sessionSetCookieSettings sessionSettings
 
     loop s = freeMap (\a -> return (a, s)) $
         \u -> handleRelay u (loop s) (handle s)
@@ -82,17 +82,23 @@ runSession handler sessionSettings current eff = do
     handle s (GetSessionId c) =
         loop s . c . sessionId $ s
 
-    handle s (RenderSetCookie c) =
-        loop s . c $ ("Set-Cookie", Blaze.toByteString . Cookie.renderSetCookie $ setCookie)
+    handle s (RenderSetCookie c) = do
+        requestIsSecure <- fmap Wai.isSecure ask
+        loop s . c $ ("Set-Cookie", Blaze.toByteString . Cookie.renderSetCookie $ setCookie requestIsSecure)
 
         where
         sid = sessionId s
-        expire = sessionExpireDate . sessionData $ s
-        setCookie = Cookie.def
+        expires = if addExpires scSettings
+                    then Just . sessionExpireDate . sessionData $ s
+                    else Nothing
+        setCookie requestIsSecure = Cookie.def
                   { Cookie.setCookieName = sname
                   , Cookie.setCookieValue = sid
-                  , Cookie.setCookieExpires = Just expire
-                  , Cookie.setCookieSecure = isSecure
+                  , Cookie.setCookieExpires = expires
+                  , Cookie.setCookieSecure = requestIsSecure && addSecureIfHttps scSettings
+                  , Cookie.setCookieHttpOnly = isHttpOnly scSettings
+                  , Cookie.setCookieDomain = cookieDomain scSettings
+                  , Cookie.setCookiePath = cookiePath scSettings
                   }
 
 getRequestSessionId :: B.ByteString -> Wai.Request -> Maybe B.ByteString
