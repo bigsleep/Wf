@@ -1,3 +1,44 @@
+------------------------------------------------------------------------------
+20141230 csrfなど
+
+cookieが自動で送られるのでログインしているときに不正な操作が可能になってしまうことがある。
+
+formにhiddenでtokenを入れる
+
+tokenはsessionIdをそのまま使うこともある。
+
+テンプレートエンジンで埋め込む必要がある?
+
+csrf tokenを取得するAPIを作ってjavascriptで呼べばいい気もする。
+
+angularとかを見る
+
+set-cookieでtokenを送って、これをcookieの他 (X-XSRF-TOKENなど) にHeaderに付与する
+javascriptから操作する必要があるためHttpOnlyを解除する必要がある
+
+script要素などから呼び出されないようにする。新しいブラウザなどでは対策されているかもしれない
+X-Requested-With, Orginのヘッダをサーバー側チェック
+配列ではなくオブジェクトにする?
+
+-----------------------------------------------------------------------------
+20141230 cookie secure 属性
+
+httpsで作ったクッキーをhttpでは送らない
+全部httpsならset-cookieをサーバーから送るときにsecure属性をつけるだけ
+
+http, https混在
+httpsでログインしてsessionId発行する場合はsecureにできない
+sessionIdとは別のトークンをsecure属性のついたトークンとして発行する。set-cookieヘッダで送る
+トークンはsessionに保存する。httpsの場合にcookieヘッダで送られてきたトークンとsessionのトークンを比較する
+
+Sessionの対応?
+
+set-cookieの属性の付け方を設定できるようにする
+httpsならsecure属性をつける
+expires属性をつけるかどうか
+http-onlyをつける
+domain, path あまり使わなそう
+
 -----------------------------------------------------------------------------
 20141220 extensible-effects
 
