@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings, FlexibleContexts, TypeOperators #-}
 module Main where
 
+import Control.Monad (when)
 import Control.Eff (Member, Eff, (:>))
 import Control.Eff.Reader.Strict (Reader, runReader)
 import Control.Eff.Exception (runExc)
@@ -9,15 +10,15 @@ import Control.Exception (SomeException)
 
 import Wf.Control.Eff.Logger (LogLevel(..), runLoggerStdIO)
 import Wf.Kvs.Redis (Kvs, runKvsRedis)
-import Wf.Session.Kvs (Session, sget, sput, renderSetCookie, SessionKvs, SessionSettings(..), runSessionKvs)
+import Wf.Session.Kvs (Session, sget, sput, renderSetCookie, SessionKvs, SessionSettings(..), defaultSessionSettings, runSessionKvs)
 import Wf.Network.Http.Response (setStatus, addHeader, html, defaultResponse)
 import Wf.Network.Wai (toWaiResponse)
 import Wf.Application.Time (getCurrentTime)
 import Wf.Application.Exception (Exception)
 import Wf.Application.Logger (Logger, logDebug)
 
-import qualified Network.Wai as Wai (Request, Response, requestHeaders)
-import qualified Network.HTTP.Types as HTTP (status500)
+import qualified Network.Wai as Wai (Request, Response, requestHeaders, requestMethod)
+import qualified Network.HTTP.Types as HTTP (status500, methodPost)
 import qualified Database.Redis as Redis (ConnectInfo(..), defaultConnectInfo)
 import qualified Network.Wai.Handler.Warp as Warp (run)
 
@@ -43,11 +44,11 @@ app req = do
         return . toWaiResponse . addHeader setCookie . html body $ defaultResponse ()
 
     exec (Just c) = do
-        sput "count" (B.pack . show $ (c + 1 :: Integer))
-        let body = "<!DOCTYPE html><h1>" `L.append` (L.pack . show $ c) `L.append` "</h1>" `L.append` button
+        when (Wai.requestMethod req == HTTP.methodPost) $ sput "count" (B.pack . show $ (c + 1 :: Integer))
+        let body = "<!DOCTYPE html><meta charset=\"utf-8\"><h1>" `L.append` (L.pack . show $ c) `L.append` "</h1>" `L.append` button
         return . toWaiResponse . html body $ defaultResponse ()
 
-    button = "<form action=\"\" method=\"get\"><input type=\"submit\" value=\"++\"></form>"
+    button = "<form action=\"\" method=\"post\"><input type=\"submit\" value=\"++\"></form>"
 
 
 
@@ -73,7 +74,7 @@ run ::
     IO (Either SomeException Wai.Response)
 run request a = do
     t <- getCurrentTime
-    let ssettings = SessionSettings sname False 300 40
+    let ssettings = defaultSessionSettings { sessionName = sname, sessionTtl = 300 }
     runLift
         . runLoggerStdIO DEBUG
         . runExc

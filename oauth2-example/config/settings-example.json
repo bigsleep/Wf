@@ -14,8 +14,12 @@
     },
     "session": {
         "sessionName": "SID",
-        "sessionIsSecure": false,
-        "sessionTtl" : 120,
-        "sessionIdLength" : 40
+        "sessionTtl": 120,
+        "sessionIdLength": 40,
+        "sessionSetCookieSettings": {
+            "addSecureIfHttps": true,
+            "addExpires": false,
+            "isHttpOnly": true
+        }
     }
 }

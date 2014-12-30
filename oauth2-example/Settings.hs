@@ -8,7 +8,7 @@ import qualified Data.Aeson as DA (Value(..), FromJSON(..), (.:))
 import qualified Data.ByteString as B (ByteString)
 
 import Wf.Web.Authenticate.OAuth2 (OAuth2Config)
-import Wf.Session.Types (SessionSettings(..))
+import Wf.Session.Types (SessionSettings(..), SetCookieSettings(..))
 
 data Settings = Settings
     { settingsPort :: Int
@@ -28,4 +28,5 @@ instance DA.FromJSON Settings where
     parseJSON _ = mzero
 
 
+instance DA.FromJSON SetCookieSettings
 instance DA.FromJSON SessionSettings
