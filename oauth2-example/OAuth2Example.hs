@@ -97,12 +97,11 @@ routes :: (Wai.Request -> M Wai.Response -> IO Wai.Response) -> B.ByteString -> 
 routes run uri request =
     apiRoutes defaultApp rs request
     where
-    run' = run request
-    rs = [ getApi run' "/" (const rootApp :: Wai.Request -> M Wai.Response)
-         , postApi run' "/login" loginApp
-         , getApi run' "/oauth2callback" (oauth2CallbackApp uri)
+    rs = [ getApi run "/" (const rootApp :: Wai.Request -> M Wai.Response)
+         , postApi run "/login" loginApp
+         , getApi run "/oauth2callback" (oauth2CallbackApp uri)
          ]
-    defaultApp _ c = c =<< run' rootApp
+    defaultApp _ c = c =<< (run request) rootApp
 
 instance AuthenticationType () where
     type AuthenticationKeyType () = ()

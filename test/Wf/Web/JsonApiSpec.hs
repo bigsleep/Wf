@@ -89,8 +89,8 @@ testApp = apiRoutes defaultApp
     , jsonPostApi run "/dic" (return . dicApp)
     ]
     where
-    run :: M Wai.Response -> IO Wai.Response
-    run = (handleResult =<<) . runLift . runLoggerStdIO DEBUG . runExc
+    run :: Wai.Request -> M Wai.Response -> IO Wai.Response
+    run _ = (handleResult =<<) . runLift . runLoggerStdIO DEBUG . runExc
     defaultApp _ cont = cont . toWaiResponse $ notFoundApp
     handleResult (Right r) = return r
     handleResult (Left _) = return . toWaiResponse . setStatus HTTP.status400 . defaultResponse $ ()

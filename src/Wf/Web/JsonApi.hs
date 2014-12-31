@@ -21,7 +21,7 @@ import Data.Reflection (Given)
 import Data.Typeable (Typeable)
 
 import qualified Network.HTTP.Types as HTTP (status200, methodPost, methodGet, hContentType, hContentLength)
-import qualified Network.Wai as Wai (Response)
+import qualified Network.Wai as Wai (Request, Response)
 
 import Wf.Network.Http.Types (Request(..), Response(..))
 import Wf.Web.Api (ApiDefinition(..), ApiInfo)
@@ -54,7 +54,7 @@ instance Control.Exception.Exception JsonParseError
 
 jsonApi
     :: (DA.FromJSON i, DA.ToJSON o, Member Exception r, Member Logger r)
-    => (Eff r Wai.Response -> IO Wai.Response)
+    => (Wai.Request -> Eff r Wai.Response -> IO Wai.Response)
     -> String
     -> RouteDefinition
     -> (Given ApiInfo => i -> Eff r o)
@@ -64,7 +64,7 @@ jsonApi run name route f =
     { apiName = name
     , apiRouteDefinition = route
     , apiImplement = \request cont ->
-        cont =<< run . (return . toWaiResponse =<<) . app f =<< fromWaiRequest request
+        cont =<< run request . (return . toWaiResponse =<<) . app f =<< fromWaiRequest request
     }
 
     where
@@ -95,7 +95,7 @@ jsonApi run name route f =
 
 jsonPostApi, jsonGetApi
     :: (DA.FromJSON i, DA.ToJSON o, Member Exception r, Member Logger r)
-    => (Eff r Wai.Response -> IO Wai.Response)
+    => (Wai.Request -> Eff r Wai.Response -> IO Wai.Response)
     -> String
     -> (Given ApiInfo => i -> Eff r o)
     -> ApiDefinition

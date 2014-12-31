@@ -21,7 +21,7 @@ import Data.Reflection (Given, give, given)
 import qualified Wf.Web.Routing as R (RouteDefinition(..), RouteMethod(..), Parameter, route, routes, parseRoute)
 import qualified Network.HTTP.Types as HTTP (Method, methodGet, methodPost)
 import Wf.Network.Wai (FromWaiRequest(..), ToWaiResponse(..))
-import qualified Network.Wai as Wai (Application, Response, requestMethod, rawPathInfo)
+import qualified Network.Wai as Wai (Application, Request, Response, requestMethod, rawPathInfo)
 
 data ApiDefinition = ApiDefinition
     { apiName :: String
@@ -63,7 +63,7 @@ postWai route =  ApiDefinition route (rdpost route)
 
 createApi
     :: (Monad m, FromWaiRequest request, ToWaiResponse response)
-    => (m Wai.Response -> IO Wai.Response)
+    => (Wai.Request -> m Wai.Response -> IO Wai.Response)
     -> String
     -> R.RouteDefinition
     ->(Given ApiInfo => request -> m response)
@@ -73,12 +73,12 @@ createApi run name route app =
     { apiName = name
     , apiRouteDefinition = route
     , apiImplement = \request cont ->
-        cont =<< run . (return . toWaiResponse =<<) . app =<< fromWaiRequest request
+        cont =<< run request . (return . toWaiResponse =<<) . app =<< fromWaiRequest request
     }
 
 getApi, postApi
     :: (Monad m, FromWaiRequest request, ToWaiResponse response)
-    => (m Wai.Response -> IO Wai.Response)
+    => (Wai.Request -> m Wai.Response -> IO Wai.Response)
     -> String
     -> (Given ApiInfo => request -> m response)
     -> ApiDefinition
@@ -87,7 +87,7 @@ postApi run route = createApi run route (rdpost route)
 
 createApiWith
     :: (Monad m, FromWaiRequest request, ToWaiResponse response)
-    => (m Wai.Response -> IO Wai.Response)
+    => (Wai.Request -> m Wai.Response -> IO Wai.Response)
     -> String
     -> R.RouteDefinition
     -> (Given ApiInfo => request -> m input)
@@ -100,7 +100,7 @@ createApiWith run name route parser implement renderer =
 
 getApiWith, postApiWith
     :: (Monad m, FromWaiRequest request, ToWaiResponse response)
-    => (m Wai.Response -> IO Wai.Response)
+    => (Wai.Request -> m Wai.Response -> IO Wai.Response)
     -> String
     -> (Given ApiInfo => request -> m input)
     -> (Given ApiInfo => input -> m output)
