@@ -5,6 +5,7 @@ module Wf.Network.Http.Types
 , RequestMethod
 , RequestHeader
 , RequestQuery
+, UrlEncoded(..)
 , Response(..)
 , ResponseStatus
 , ResponseHeader
@@ -41,6 +42,8 @@ data Request body = Request
     , requestBody :: body
     , requestIsSecure :: Bool
     } deriving (Show, Typeable, Eq)
+
+newtype UrlEncoded = UrlEncoded { unFormUrlEncoded :: HTTP.Query }
 
 type ResponseStatus = HTTP.Status
 

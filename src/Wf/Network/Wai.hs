@@ -7,8 +7,9 @@ module Wf.Network.Wai
 
 import qualified Data.ByteString.Lazy as L (ByteString, empty)
 import qualified Data.Text.Encoding as T (encodeUtf8)
-import qualified Network.Wai as Wai (Application, Request, httpVersion, requestMethod, requestHeaders, pathInfo, rawPathInfo, queryString, rawQueryString, isSecure, remoteHost, strictRequestBody, Response, responseLBS, responseFile)
-import Wf.Network.Http.Types (Request(..), Response(..), ResponseFilePath(..))
+import qualified Network.Wai as Wai (Application, Request, httpVersion, requestMethod, requestHeaders, requestBody, pathInfo, rawPathInfo, queryString, rawQueryString, isSecure, remoteHost, strictRequestBody, Response, responseLBS, responseFile)
+import qualified Network.HTTP.Types as HTTP (parseQuery)
+import Wf.Network.Http.Types (Request(..), Response(..), ResponseFilePath(..), UrlEncoded(..))
 
 toWaiApplication
     :: (FromWaiRequest request, ToWaiResponse response)
@@ -25,35 +26,28 @@ instance FromWaiRequest (Wai.Request) where
     fromWaiRequest = return
 
 instance FromWaiRequest (Request L.ByteString) where
-    fromWaiRequest w = do
-        body <- Wai.strictRequestBody w
-        return Request
-            { requestHttpVersion = Wai.httpVersion w
-            , requestMethod = Wai.requestMethod w
-            , requestHeaders = Wai.requestHeaders w
-            , requestPath = fmap T.encodeUtf8 . Wai.pathInfo $ w
-            , requestRawPath =  Wai.rawPathInfo w
-            , requestQuery = Wai.queryString w
-            , requestRawQuery = Wai.rawQueryString w
-            , requestRemoteHost = Wai.remoteHost w
-            , requestIsSecure = Wai.isSecure w
-            , requestBody = body
-            }
+    fromWaiRequest w =
+        return . fromWaiRequest' w =<< Wai.strictRequestBody w
 
 instance FromWaiRequest (Request ()) where
-    fromWaiRequest w =
-        return Request
-            { requestHttpVersion = Wai.httpVersion w
-            , requestMethod = Wai.requestMethod w
-            , requestHeaders = Wai.requestHeaders w
-            , requestPath = fmap T.encodeUtf8 . Wai.pathInfo $ w
-            , requestRawPath =  Wai.rawPathInfo w
-            , requestQuery = Wai.queryString w
-            , requestRawQuery = Wai.rawQueryString w
-            , requestRemoteHost = Wai.remoteHost w
-            , requestIsSecure = Wai.isSecure w
-            , requestBody = ()
-            }
+    fromWaiRequest = return . flip fromWaiRequest' ()
+
+instance FromWaiRequest (Request UrlEncoded) where
+    fromWaiRequest w = return . fromWaiRequest' w . UrlEncoded . HTTP.parseQuery =<< Wai.requestBody w
+
+fromWaiRequest' :: Wai.Request -> body -> Request body
+fromWaiRequest' w b = Request
+    { requestHttpVersion = Wai.httpVersion w
+    , requestMethod = Wai.requestMethod w
+    , requestHeaders = Wai.requestHeaders w
+    , requestPath = fmap T.encodeUtf8 . Wai.pathInfo $ w
+    , requestRawPath =  Wai.rawPathInfo w
+    , requestQuery = Wai.queryString w
+    , requestRawQuery = Wai.rawQueryString w
+    , requestRemoteHost = Wai.remoteHost w
+    , requestIsSecure = Wai.isSecure w
+    , requestBody = b
+    }
 
 instance ToWaiResponse Wai.Response where
     toWaiResponse = id
