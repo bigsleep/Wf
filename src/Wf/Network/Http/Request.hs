@@ -5,10 +5,11 @@ module Wf.Network.Http.Request
 , RequestMethod
 , RequestHeader
 , RequestQuery
+, UrlEncoded(..)
 , queryParam
 ) where
 
-import Wf.Network.Http.Types (Request(..), HttpVersion, RequestMethod, RequestHeader, RequestQuery)
+import Wf.Network.Http.Types (Request(..), HttpVersion, RequestMethod, RequestHeader, RequestQuery, UrlEncoded(..))
 
 import Control.Monad (join)
 import Control.Eff (Member, Eff)

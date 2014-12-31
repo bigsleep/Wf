@@ -38,16 +38,13 @@ import Test.Hspec (Spec, describe, it, shouldBe, shouldSatisfy, expectationFailu
 jsonApiSpec :: Spec
 jsonApiSpec = describe "json api" . it "create json api" $ do
     let rootInput = ()
-    execCase HTTP.methodGet "/" rootInput (shouldResponseNormal . rootApp $ rootInput)
-
-    let rootBadInput = "admin" :: String
-    execCase HTTP.methodGet "/" rootBadInput (shouldError 400)
+    execCase HTTP.methodGet "/" rootInput (shouldResponseNormal . const rootApp $ rootInput)
 
     let addInput = (1, 2) :: (Int, Int)
-    execCase HTTP.methodGet "/add" addInput (shouldResponseNormal (3 :: Int))
+    execCase HTTP.methodPost "/add" addInput (shouldResponseNormal (3 :: Int))
 
     let addBadInput = (1, 2, 3) :: (Int, Int, Int)
-    execCase HTTP.methodGet "/add" addBadInput (shouldError 400)
+    execCase HTTP.methodPost "/add" addBadInput (shouldError 400)
 
     let dicInput = [1, 2, 3, 4, 5] :: [Int]
     execCase HTTP.methodPost "/dic" dicInput (shouldResponseNormal . dicApp $ dicInput)
@@ -84,8 +81,8 @@ type M = Eff (Exception :> Logger :> Lift IO :> ())
 
 testApp :: Wai.Application
 testApp = apiRoutes defaultApp
-    [ jsonGetApi run "/" (return . rootApp)
-    , jsonGetApi run "/add" (return . addApp)
+    [ jsonGetApi run "/" (return rootApp)
+    , jsonPostApi run "/add" (return . addApp)
     , jsonPostApi run "/dic" (return . dicApp)
     ]
     where
@@ -98,8 +95,8 @@ testApp = apiRoutes defaultApp
 notFoundApp :: Response L.ByteString
 notFoundApp = setBody "<h1>Not Found</h1>" . setStatus HTTP.status404 $ defaultResponse ()
 
-rootApp :: () -> String
-rootApp _ = "<p>hello</p>"
+rootApp :: String
+rootApp = "<p>hello</p>"
 
 addApp :: (Integer, Integer) -> Integer
 addApp (a, b) = a + b

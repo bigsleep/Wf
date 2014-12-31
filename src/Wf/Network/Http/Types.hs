@@ -43,7 +43,7 @@ data Request body = Request
     , requestIsSecure :: Bool
     } deriving (Show, Typeable, Eq)
 
-newtype UrlEncoded = UrlEncoded { unFormUrlEncoded :: HTTP.Query }
+newtype UrlEncoded = UrlEncoded { unUrlEncoded :: HTTP.Query }
 
 type ResponseStatus = HTTP.Status
 

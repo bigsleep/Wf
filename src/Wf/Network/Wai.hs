@@ -3,6 +3,7 @@ module Wf.Network.Wai
 ( FromWaiRequest(..)
 , ToWaiResponse(..)
 , toWaiApplication
+, UrlEncoded(..)
 ) where
 
 import qualified Data.ByteString.Lazy as L (ByteString, empty)

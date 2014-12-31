@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings, FlexibleContexts, RankNTypes, DeriveDataTypeable #-}
 module Wf.Web.JsonApi
 ( jsonApi
+, jsonApiNoInput
 , jsonPostApi
 , jsonGetApi
 , JsonInput(..)
@@ -93,11 +94,50 @@ jsonApi run name route f =
     onError :: (Member Exception r) => L.ByteString -> Eff r a
     onError = throwException . JsonParseError . (++) "input: " . L.unpack
 
-jsonPostApi, jsonGetApi
+
+jsonApiNoInput
+    :: (DA.ToJSON o, Member Logger r)
+    => (Wai.Request -> Eff r Wai.Response -> IO Wai.Response)
+    -> String
+    -> RouteDefinition
+    -> (Given ApiInfo => Eff r o)
+    -> ApiDefinition
+jsonApiNoInput run name rd f =
+    ApiDefinition
+    { apiName = name
+    , apiRouteDefinition = rd
+    , apiImplement = \request cont -> cont =<< run request (render =<< f)
+    }
+
+    where
+    render :: (DA.ToJSON o, Member Logger r)
+           => o -> Eff r Wai.Response
+    render output = do
+        let body = DA.encode (JsonOutput output)
+            contentType = (HTTP.hContentType, "application/json")
+            contentLength = (HTTP.hContentLength, B.pack . show . L.length $ body)
+            response = Response
+                { responseStatus = HTTP.status200
+                , responseHeaders = [contentType, contentLength]
+                , responseBody = body
+                }
+        logDebug $ "jsonApi response: " ++ show response
+        return $ toWaiResponse response
+
+jsonPostApi
     :: (DA.FromJSON i, DA.ToJSON o, Member Exception r, Member Logger r)
     => (Wai.Request -> Eff r Wai.Response -> IO Wai.Response)
     -> String
     -> (Given ApiInfo => i -> Eff r o)
     -> ApiDefinition
 jsonPostApi run route = jsonApi run route RouteDefinition { routeDefinitionMethod = RouteMethodSpecific HTTP.methodPost, routeDefinitionPattern = parseRoute route }
-jsonGetApi run route = jsonApi run route RouteDefinition { routeDefinitionMethod = RouteMethodSpecific HTTP.methodGet, routeDefinitionPattern = parseRoute route }
+
+jsonGetApi
+    :: (DA.ToJSON o, Member Logger r)
+    => (Wai.Request -> Eff r Wai.Response -> IO Wai.Response)
+    -> String
+    -> (Given ApiInfo => Eff r o)
+    -> ApiDefinition
+jsonGetApi run route = jsonApiNoInput run route rd
+    where
+    rd = RouteDefinition { routeDefinitionMethod = RouteMethodSpecific HTTP.methodGet, routeDefinitionPattern = parseRoute route }
