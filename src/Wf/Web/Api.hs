@@ -14,6 +14,8 @@ module Wf.Web.Api
 , postApiWith
 ) where
 
+import Control.Eff (Eff, Member, SetMember)
+import Control.Eff.Lift (Lift)
 import qualified Data.List as L (lookup)
 import qualified Data.ByteString as B (ByteString)
 import Data.Typeable (Typeable)
@@ -21,6 +23,7 @@ import Data.Reflection (Given, give, given)
 import qualified Wf.Web.Routing as R (RouteDefinition(..), RouteMethod(..), Parameter, route, routes, parseRoute)
 import qualified Network.HTTP.Types as HTTP (Method, methodGet, methodPost)
 import Wf.Network.Wai (FromWaiRequest(..), ToWaiResponse(..))
+import Wf.Application.Exception (Exception, liftException)
 import qualified Network.Wai as Wai (Application, Request, Response, requestMethod, rawPathInfo)
 
 data ApiDefinition = ApiDefinition
@@ -39,7 +42,8 @@ apiRoutes
     :: Wai.Application
     -> [ApiDefinition]
     -> Wai.Application
-apiRoutes defaultApp apis request = R.routes defaultApp (map entry apis) method path request
+apiRoutes defaultApp apis request cont =
+    R.routes defaultApp (map entry apis) method path request cont
     where
     method = Wai.requestMethod request
     path = Wai.rawPathInfo request
@@ -62,49 +66,52 @@ getWai route = ApiDefinition route (rdget route)
 postWai route =  ApiDefinition route (rdpost route)
 
 createApi
-    :: (Monad m, FromWaiRequest request, ToWaiResponse response)
-    => (Wai.Request -> m Wai.Response -> IO Wai.Response)
+    :: (Member Exception r, SetMember Lift (Lift IO) r, FromWaiRequest request, ToWaiResponse response)
+    => (Wai.Request -> Eff r Wai.Response -> IO Wai.Response)
     -> String
     -> R.RouteDefinition
-    ->(Given ApiInfo => request -> m response)
+    ->(Given ApiInfo => request -> Eff r response)
     -> ApiDefinition
 createApi run name route app =
     ApiDefinition
     { apiName = name
     , apiRouteDefinition = route
     , apiImplement = \request cont ->
-        cont =<< run request . (return . toWaiResponse =<<) . app =<< fromWaiRequest request
+        (cont =<<) . run request $ do
+            input <- liftException $ fromWaiRequest request
+            output <- app input
+            return (toWaiResponse output)
     }
 
 getApi, postApi
-    :: (Monad m, FromWaiRequest request, ToWaiResponse response)
-    => (Wai.Request -> m Wai.Response -> IO Wai.Response)
+    :: (Member Exception r, SetMember Lift (Lift IO) r, FromWaiRequest request, ToWaiResponse response)
+    => (Wai.Request -> Eff r Wai.Response -> IO Wai.Response)
     -> String
-    -> (Given ApiInfo => request -> m response)
+    -> (Given ApiInfo => request -> Eff r response)
     -> ApiDefinition
 getApi run route = createApi run route (rdget route)
 postApi run route = createApi run route (rdpost route)
 
 createApiWith
-    :: (Monad m, FromWaiRequest request, ToWaiResponse response)
-    => (Wai.Request -> m Wai.Response -> IO Wai.Response)
+    :: (Member Exception r, SetMember Lift (Lift IO) r, FromWaiRequest request, ToWaiResponse response)
+    => (Wai.Request -> Eff r Wai.Response -> IO Wai.Response)
     -> String
     -> R.RouteDefinition
-    -> (Given ApiInfo => request -> m input)
-    -> (Given ApiInfo => input -> m output)
-    -> (Given ApiInfo => output -> m response)
+    -> (Given ApiInfo => request -> Eff r input)
+    -> (Given ApiInfo => input -> Eff r output)
+    -> (Given ApiInfo => output -> Eff r response)
     -> ApiDefinition
 createApiWith run name route parser implement renderer =
     createApi run name route $
         \request -> parser request >>= implement >>= renderer
 
 getApiWith, postApiWith
-    :: (Monad m, FromWaiRequest request, ToWaiResponse response)
-    => (Wai.Request -> m Wai.Response -> IO Wai.Response)
+    :: (Member Exception r, SetMember Lift (Lift IO) r, FromWaiRequest request, ToWaiResponse response)
+    => (Wai.Request -> Eff r Wai.Response -> IO Wai.Response)
     -> String
-    -> (Given ApiInfo => request -> m input)
-    -> (Given ApiInfo => input -> m output)
-    -> (Given ApiInfo => output -> m response)
+    -> (Given ApiInfo => request -> Eff r input)
+    -> (Given ApiInfo => input -> Eff r output)
+    -> (Given ApiInfo => output -> Eff r response)
     -> ApiDefinition
 getApiWith run route = createApiWith run route (rdget route)
 postApiWith run route = createApiWith run route (rdpost route)

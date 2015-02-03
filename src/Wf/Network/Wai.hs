@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeOperators, FlexibleContexts, FlexibleInstances, ExistentialQuantification #-}
+{-# LANGUAGE OverloadedStrings, TypeOperators, FlexibleContexts, FlexibleInstances, ExistentialQuantification #-}
 module Wf.Network.Wai
 ( FromWaiRequest(..)
 , ToWaiResponse(..)
@@ -6,11 +6,15 @@ module Wf.Network.Wai
 , UrlEncoded(..)
 ) where
 
-import qualified Data.ByteString.Lazy as L (ByteString, empty)
+import Control.Exception (throwIO)
+import qualified Data.ByteString.Lazy as L (ByteString, empty, fromStrict)
+import qualified Data.ByteString.Lazy.Char8 as L (unpack)
 import qualified Data.Text.Encoding as T (encodeUtf8)
-import qualified Network.Wai as Wai (Application, Request, httpVersion, requestMethod, requestHeaders, requestBody, pathInfo, rawPathInfo, queryString, rawQueryString, isSecure, remoteHost, strictRequestBody, Response, responseLBS, responseFile)
-import qualified Network.HTTP.Types as HTTP (parseQuery)
-import Wf.Network.Http.Types (Request(..), Response(..), ResponseFilePath(..), UrlEncoded(..))
+import qualified Data.Aeson as DA (ToJSON, FromJSON, encode, decode)
+import qualified Network.Wai as Wai (Application, Request, httpVersion, requestMethod, requestHeaders, requestBody, strictRequestBody, pathInfo, rawPathInfo, queryString, rawQueryString, isSecure, remoteHost, strictRequestBody, Response, responseLBS, responseFile)
+import qualified Network.HTTP.Types as HTTP (parseQuery, renderQuery, hContentType)
+import Wf.Network.Http.Types (Request(..), Response(..), ResponseFilePath(..), UrlEncoded(..), JsonRequest(..), JsonResponse(..), JsonParseError(..), defaultResponse)
+import Wf.Network.Http.Response (json)
 
 toWaiApplication
     :: (FromWaiRequest request, ToWaiResponse response)
@@ -35,6 +39,20 @@ instance FromWaiRequest (Request ()) where
 
 instance FromWaiRequest (Request UrlEncoded) where
     fromWaiRequest w = return . fromWaiRequest' w . UrlEncoded . HTTP.parseQuery =<< Wai.requestBody w
+
+instance DA.FromJSON a => FromWaiRequest (Request (JsonRequest a)) where
+    fromWaiRequest w = do
+        b <- Wai.strictRequestBody w
+        case DA.decode b of
+             Just a -> return . fromWaiRequest' w $ a
+             Nothing -> throwIO . JsonParseError $ "cannot decode json: " ++ L.unpack b
+
+instance DA.FromJSON a => FromWaiRequest (JsonRequest a) where
+    fromWaiRequest w = do
+        b <- Wai.strictRequestBody w
+        case DA.decode b of
+             Just a -> return a
+             Nothing -> throwIO . JsonParseError $ "cannot decode json: " ++ L.unpack b
 
 fromWaiRequest' :: Wai.Request -> body -> Request body
 fromWaiRequest' w b = Request
@@ -61,3 +79,18 @@ instance ToWaiResponse (Response ()) where
 
 instance ToWaiResponse (Response ResponseFilePath) where
     toWaiResponse res = Wai.responseFile (responseStatus res) (responseHeaders res) (unResponseFilePath $ responseBody res) Nothing
+
+instance ToWaiResponse (Response UrlEncoded) where
+    toWaiResponse res = Wai.responseLBS (responseStatus res) headers b
+        where
+        b = L.fromStrict . HTTP.renderQuery False . unUrlEncoded . responseBody $ res
+        headers = (HTTP.hContentType, "application/x-www-form-urlencoded") : responseHeaders res
+
+instance DA.ToJSON a => ToWaiResponse (Response (JsonResponse a)) where
+    toWaiResponse res = toWaiResponse res'
+        where
+        b = DA.encode . responseBody $ res
+        res' = json b res
+
+instance DA.ToJSON a => ToWaiResponse (JsonResponse a) where
+    toWaiResponse a = toWaiResponse . json (DA.encode a) . defaultResponse $ ()

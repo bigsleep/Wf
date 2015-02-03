@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeOperators, OverloadedStrings, FlexibleContexts, TemplateHaskell #-}
+{-# LANGUAGE TypeOperators, ScopedTypeVariables, OverloadedStrings, FlexibleContexts, TemplateHaskell #-}
 module Wf.Web.JsonApiSpec
 ( jsonApiSpec
 ) where
@@ -24,9 +24,8 @@ import qualified Data.Aeson as DA (FromJSON(..), ToJSON(..), Value(..), encode, 
 import qualified Data.Aeson.TH as DA (deriveJSON, defaultOptions)
 import qualified Data.Map as M
 
-import Wf.Web.Api (apiRoutes)
-import Wf.Web.JsonApi (jsonApi, jsonPostApi, jsonGetApi, JsonInput(..), JsonOutput(..), JsonParseError)
-import Wf.Network.Http.Types (Request(..), Response(..), defaultRequest, defaultResponse)
+import Wf.Web.Api (apiRoutes, getApi, postApi)
+import Wf.Network.Http.Types (Request(..), Response(..), defaultRequest, defaultResponse, JsonRequest(..), JsonResponse(..), JsonParseError)
 import Wf.Network.Http.Response (setStatus, setBody)
 import Wf.Network.Wai (toWaiResponse)
 import Wf.Application.Exception (Exception)
@@ -41,13 +40,13 @@ jsonApiSpec = describe "json api" . it "create json api" $ do
     execCase HTTP.methodGet "/" rootInput (shouldResponseNormal . const rootApp $ rootInput)
 
     let addInput = (1, 2) :: (Int, Int)
-    execCase HTTP.methodPost "/add" addInput (shouldResponseNormal (3 :: Int))
+    execCase HTTP.methodPost "/add" addInput (shouldResponseNormal (JsonResponse 3 :: JsonResponse Int))
 
     let addBadInput = (1, 2, 3) :: (Int, Int, Int)
     execCase HTTP.methodPost "/add" addBadInput (shouldError 400)
 
     let dicInput = [1, 2, 3, 4, 5] :: [Int]
-    execCase HTTP.methodPost "/dic" dicInput (shouldResponseNormal . dicApp $ dicInput)
+    execCase HTTP.methodPost "/dic" dicInput (shouldResponseNormal . dicApp . JsonRequest $ dicInput)
 
     let dicBadInput = ["1", "2", "3", "4"] :: [String]
     execCase HTTP.methodPost "/dic" dicBadInput (shouldError 400)
@@ -60,14 +59,14 @@ jsonApiSpec = describe "json api" . it "create json api" $ do
     execCase method path a s =
         WT.runSession (s sreq) testApp
         where
-        body = DA.encode (JsonInput a)
+        body = DA.encode (JsonRequest a)
         req = WT.setRawPathInfo WT.defaultRequest {Wai.requestMethod = method} path
         sreq = WT.SRequest { WT.simpleRequest = req, WT.simpleRequestBody = body }
 
     shouldResponseNormal :: (DA.ToJSON a) => a -> WT.SRequest -> WT.Session ()
     shouldResponseNormal body sreq  = do
         r <- WT.srequest sreq
-        let body' = DA.encode . JsonOutput $ body
+        let body' = DA.encode body
         WT.assertStatus 200 r
         WT.assertContentType "application/json" r
         WT.assertHeader HTTP.hContentLength (B.pack . show . L.length $ body') r
@@ -81,9 +80,9 @@ type M = Eff (Exception :> Logger :> Lift IO :> ())
 
 testApp :: Wai.Application
 testApp = apiRoutes defaultApp
-    [ jsonGetApi run "/" (return rootApp)
-    , jsonPostApi run "/add" (return . addApp)
-    , jsonPostApi run "/dic" (return . dicApp)
+    [ getApi run "/" $ \(_ :: Request ()) -> return rootApp
+    , postApi run "/add" (return . addApp)
+    , postApi run "/dic" (return . dicApp)
     ]
     where
     run :: Wai.Request -> M Wai.Response -> IO Wai.Response
@@ -95,11 +94,11 @@ testApp = apiRoutes defaultApp
 notFoundApp :: Response L.ByteString
 notFoundApp = setBody "<h1>Not Found</h1>" . setStatus HTTP.status404 $ defaultResponse ()
 
-rootApp :: String
-rootApp = "<p>hello</p>"
+rootApp :: JsonResponse String
+rootApp = JsonResponse "<p>hello</p>"
 
-addApp :: (Integer, Integer) -> Integer
-addApp (a, b) = a + b
+addApp :: JsonRequest (Integer, Integer) -> JsonResponse Integer
+addApp (JsonRequest (a, b)) = JsonResponse $ a + b
 
-dicApp :: [Int] -> M.Map String Int
-dicApp xs = M.fromList $ zip (map show xs) xs
+dicApp :: JsonRequest [Int] -> JsonResponse (M.Map String Int)
+dicApp (JsonRequest xs) = JsonResponse $ M.fromList $ zip (map show xs) xs

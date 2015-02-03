@@ -21,7 +21,6 @@ library
     Wf.Control.Eff.HttpClient,
     Wf.Control.Eff.Run.Logger.File,
     Wf.Web.Api,
-    Wf.Web.JsonApi,
     Wf.Web.Routing,
     Wf.Network.Wai,
     Wf.Network.Http.Response,
