@@ -29,20 +29,20 @@ data SessionState = SessionState
     { sessionId :: B.ByteString
     , sessionData :: SessionData
     , isNew :: Bool
-    } deriving (Show, Typeable, Generic)
+    } deriving (Show, Eq, Typeable, Generic)
 
 data SessionData = SessionData
     { sessionValue :: HM.HashMap B.ByteString L.ByteString
     , sessionStartDate :: T.Time
     , sessionExpireDate :: T.Time
-    } deriving (Show, Typeable, Generic)
+    } deriving (Show, Eq, Typeable, Generic)
 
 data SessionSettings = SessionSettings
     { sessionName :: B.ByteString
     , sessionTtl :: Integer
     , sessionIdLength :: Integer
     , sessionSetCookieSettings :: SetCookieSettings
-    } deriving (Show, Typeable, Generic)
+    } deriving (Show, Eq, Typeable, Generic)
 
 data SetCookieSettings = SetCookieSettings
     { addSecureIfHttps :: Bool
@@ -50,7 +50,7 @@ data SetCookieSettings = SetCookieSettings
     , isHttpOnly :: Bool
     , cookiePath :: Maybe B.ByteString
     , cookieDomain :: Maybe B.ByteString
-    } deriving (Show, Typeable, Generic)
+    } deriving (Show, Eq, Typeable, Generic)
 
 instance Binary SessionState
 

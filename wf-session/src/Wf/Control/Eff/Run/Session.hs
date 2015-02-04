@@ -34,7 +34,7 @@ runSession handler sessionSettings current eff = do
     requestSessionId <- fmap (getRequestSessionId sname) ask
     s <- loadSession requestSessionId
     (r, s') <- loop s eff
-    saveSession s'
+    when (s' /= s) $ saveSession s'
     return r
 
     where
