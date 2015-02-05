@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                wf-authenticate
-version:             0.3.0.0
+version:             0.4.0.0
 -- synopsis:
 -- description:
 license:             MIT
@@ -22,6 +22,6 @@ library
   build-depends:
     base >=4.7 && <4.8,
     extensible-effects >=1.9 && <2.0,
-    wf >=0.3 && <0.4
+    wf >=0.4 && <0.5
   hs-source-dirs:      src
   default-language:    Haskell2010
